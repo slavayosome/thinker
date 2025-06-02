@@ -389,6 +389,7 @@ export default function Home() {
     setHistoricalPreferences(null);
     setIsLatestItem(true);
     setCurrentHistoryTitle(null);
+    setDetectedLanguage('english');
   };
 
   // Request to change URL or content type after generation
@@ -404,6 +405,12 @@ export default function Home() {
       // Clear historical posts when changing content type
       setHistoricalPosts(null);
       setHistoricalPreferences(null);
+      // Reset detected language to ensure it's re-detected for new content
+      setDetectedLanguage('english');
+      // Clear the current history ID to ensure a new history item is created
+      setCurrentHistoryId(null);
+      // Mark as latest item since we're creating new content
+      setIsLatestItem(true);
     }
   };
 
@@ -411,35 +418,36 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       {/* Header with History Button */}
       <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-4xl mx-auto px-4 py-4">
+        <div className="max-w-4xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center">
-              <div className="text-2xl font-bold text-gray-800">
+              <div className="text-xl sm:text-2xl font-bold text-gray-800">
                 🧠 Thinker
               </div>
-              <div className="ml-4 text-sm text-gray-500">
+              <div className="ml-2 sm:ml-4 text-xs sm:text-sm text-gray-500 hidden xs:block">
                 AI-Powered Content Creator
               </div>
             </div>
             
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               {(generatedContent || currentStep !== 'urlInput') && (
                 <button
                   onClick={handleStartNew}
-                  className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center"
+                  className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center"
                 >
-                  <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.707-10.293a1 1 0 00-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L9.414 11H13a1 1 0 100-2H9.414l1.293-1.293z" clipRule="evenodd" />
                   </svg>
-                  Start New
+                  <span className="hidden xs:inline">Start New</span>
+                  <span className="xs:hidden">New</span>
                 </button>
               )}
               
               <button
                 onClick={() => setHistoryOpen(true)}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+                className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
               >
-                <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
                 </svg>
                 History
@@ -451,38 +459,53 @@ export default function Home() {
         {/* History Item Status Bar */}
         {currentHistoryTitle && (
           <div className="bg-white border-t border-gray-100 shadow-sm animate-fadeInDown">
-            <div className="max-w-4xl mx-auto px-4 py-2">
-              <div className="flex items-center justify-between">
-                {/* Left Section - Current Context */}
-                <div className="flex items-center gap-3">
-                  {/* Status Indicator */}
-                  <div className="flex items-center">
-                    {!isLatestItem ? (
-                      <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 rounded-full border border-amber-200">
-                        <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-                        <span className="text-xs font-medium text-amber-800">Previous Version</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 rounded-full border border-emerald-200">
-                        <div className="w-2 h-2 bg-emerald-500 rounded-full" />
-                        <span className="text-xs font-medium text-emerald-800">Latest</span>
-                      </div>
+            <div className="max-w-4xl mx-auto px-3 sm:px-4 py-2">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
+                {/* Mobile: Stack vertically, Desktop: Side by side */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                  {/* Status Indicator - Always visible */}
+                  <div className="flex items-center justify-between sm:justify-start">
+                    <div className="flex items-center">
+                      {!isLatestItem ? (
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 rounded-full border border-amber-200">
+                          <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+                          <span className="text-xs font-medium text-amber-800">Previous</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 rounded-full border border-emerald-200">
+                          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                          <span className="text-xs font-medium text-emerald-800">Latest</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Mobile-only: Latest button inline with status */}
+                    {!isLatestItem && (
+                      <button
+                        onClick={handleLoadLatest}
+                        className="sm:hidden inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-md hover:bg-emerald-100 transition-colors"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                        </svg>
+                        <span>Latest</span>
+                      </button>
                     )}
                   </div>
 
-                  {/* Divider */}
-                  <div className="h-6 w-px bg-gray-200" />
+                  {/* Divider - Hidden on mobile */}
+                  <div className="hidden sm:block h-6 w-px bg-gray-200" />
 
                   {/* Current Work Context */}
-                  <div className="flex items-center gap-6">
-                    {/* URL Section */}
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                    {/* URL Section - Simplified on mobile */}
                     {url && (
-                      <div className="flex items-center gap-2">
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-gray-400 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                         </svg>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-600 max-w-[200px] truncate" title={url}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs sm:text-sm text-gray-600 max-w-[120px] sm:max-w-[200px] truncate" title={url}>
                             {url.startsWith('http') ? new URL(url).hostname : url}
                           </span>
                           {generatedContent && (
@@ -497,13 +520,13 @@ export default function Home() {
                       </div>
                     )}
 
-                    {/* Content Type Section */}
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 rounded-md">
-                        <span className="text-sm">
+                    {/* Content Type Section - Compact on mobile */}
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-gray-100 rounded-md">
+                        <span className="text-xs sm:text-sm">
                           {contentTypeOptions.find(opt => opt.value === selectedContentType)?.icon}
                         </span>
-                        <span className="text-sm font-medium text-gray-700">
+                        <span className="text-xs sm:text-sm font-medium text-gray-700">
                           {contentTypeOptions.find(opt => opt.value === selectedContentType)?.label}
                         </span>
                       </div>
@@ -517,19 +540,19 @@ export default function Home() {
                       )}
                     </div>
 
-                    {/* History Title */}
-                    <div className="hidden lg:flex items-center gap-2 text-sm text-gray-500">
+                    {/* History Title - Hidden on smaller screens */}
+                    <div className="hidden md:flex items-center gap-2 text-xs sm:text-sm text-gray-500">
                       <span className="text-gray-400">•</span>
-                      <span className="max-w-[300px] truncate" title={currentHistoryTitle}>
+                      <span className="max-w-[150px] lg:max-w-[300px] truncate" title={currentHistoryTitle}>
                         {currentHistoryTitle}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Right Section - Actions */}
-                <div className="flex items-center gap-2">
-                  {!isLatestItem && (
+                {/* Right Section - Desktop only Latest button */}
+                {!isLatestItem && (
+                  <div className="hidden sm:flex items-center gap-2">
                     <button
                       onClick={handleLoadLatest}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-md hover:bg-emerald-100 transition-colors"
@@ -539,21 +562,21 @@ export default function Home() {
                       </svg>
                       <span className="hidden sm:inline">Latest</span>
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         )}
       </div>
 
-      <main className="max-w-4xl mx-auto py-8 px-4">
+      <main className="max-w-4xl mx-auto py-6 sm:py-8 px-3 sm:px-4">
         {/* Header */}
-        <div className="text-center mb-8 animate-fadeInUp">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">
+        <div className="text-center mb-6 sm:mb-8 animate-fadeInUp">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 mb-2">
             Transform Articles into Social Media Content
           </h1>
-          <p className="text-xl text-gray-600">
+          <p className="text-base sm:text-lg md:text-xl text-gray-600 px-4 sm:px-0">
             Choose what to extract, paste any article URL, and get instant analysis with optimized social media content
           </p>
         </div>
