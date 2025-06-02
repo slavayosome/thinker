@@ -389,45 +389,6 @@ export default function SocialMediaResults({
 
     return (
       <div className="space-y-4">
-        {/* Current URL and Content Type Display */}
-        {currentUrl && selectedContentType && (onRequestUrlChange || onRequestContentTypeChange) && (
-          <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <div className="space-y-3">
-              {/* Current URL */}
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Current Article URL:</label>
-                  <p className="text-sm text-gray-800 break-all">{currentUrl}</p>
-                </div>
-                {onRequestUrlChange && (
-                  <button
-                    onClick={onRequestUrlChange}
-                    className="ml-3 px-3 py-1 bg-white text-blue-600 border border-blue-300 rounded-md hover:bg-blue-50 transition-colors text-sm whitespace-nowrap"
-                  >
-                    Change URL
-                  </button>
-                )}
-              </div>
-
-              {/* Current Content Type */}
-              <div className="flex items-center justify-between pt-3 border-t border-blue-200">
-                <div className="flex-1">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Content Type:</label>
-                  <p className="text-sm text-gray-800 capitalize">{selectedContentType?.replace('-', ' ')}</p>
-                </div>
-                {onRequestContentTypeChange && (
-                  <button
-                    onClick={onRequestContentTypeChange}
-                    className="ml-3 px-3 py-1 bg-white text-blue-600 border border-blue-300 rounded-md hover:bg-blue-50 transition-colors text-sm whitespace-nowrap"
-                  >
-                    Change Type
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
         <div>
           <h4 className="font-semibold text-gray-800 mb-2">Central Theme:</h4>
           <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">{context.analysis.centralTheme}</p>
