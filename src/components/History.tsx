@@ -7,6 +7,7 @@ interface HistoryProps {
   isOpen: boolean;
   onClose: () => void;
   onLoadItem: (item: HistoryItem) => void;
+  currentHistoryId?: string | null;
 }
 
 const contentTypeIcons = {
@@ -27,7 +28,7 @@ const contentTypeLabels = {
   takeaways: 'Takeaways'
 };
 
-export default function History({ isOpen, onClose, onLoadItem }: HistoryProps) {
+export default function History({ isOpen, onClose, onLoadItem, currentHistoryId }: HistoryProps) {
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -175,7 +176,9 @@ export default function History({ isOpen, onClose, onLoadItem }: HistoryProps) {
               {historyItems.map((item) => (
                 <div
                   key={item.id}
-                  className="bg-gray-50 rounded-lg p-3 hover:bg-gray-100 transition-colors cursor-pointer group"
+                  className={`bg-gray-50 rounded-lg p-3 hover:bg-gray-100 transition-colors cursor-pointer group ${
+                    currentHistoryId === item.id ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                  }`}
                   onClick={() => handleLoadItem(item)}
                 >
                   {/* Title */}
@@ -202,8 +205,13 @@ export default function History({ isOpen, onClose, onLoadItem }: HistoryProps) {
                           {contentTypeIcons[item.contentType]}
                         </span>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-medium text-gray-900 text-sm truncate">
+                          <h3 className="font-medium text-gray-900 text-sm truncate flex items-center gap-2">
                             {item.title}
+                            {currentHistoryId === item.id && (
+                              <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">
+                                Current
+                              </span>
+                            )}
                           </h3>
                           <p className="text-xs text-gray-500 truncate">
                             {item.articleTitle}

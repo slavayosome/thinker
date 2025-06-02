@@ -20,6 +20,8 @@ interface SocialMediaResultsProps {
   detectedLanguage?: Language;
   historicalPosts?: SocialPostsResult | null;
   historicalPreferences?: PostGenerationPreferences | null;
+  isLatestItem?: boolean;
+  onNewHistoryItemCreated?: (historyId: string) => void;
 }
 
 interface CollapsibleSectionProps {
@@ -107,7 +109,9 @@ export default function SocialMediaResults({
   selectedContentType,
   detectedLanguage: propDetectedLanguage,
   historicalPosts,
-  historicalPreferences
+  historicalPreferences,
+  isLatestItem = true,
+  onNewHistoryItemCreated
 }: SocialMediaResultsProps) {
   const [collapsedSections, setCollapsedSections] = useState({
     analysis: false,
@@ -329,8 +333,33 @@ export default function SocialMediaResults({
       const data = await response.json();
       setGeneratedPosts(data.posts);
       
-      // Save posts to history if we have a current history item
-      if (currentHistoryId && data.posts) {
+      // If we're working with an old history item, create a new one
+      if (!isLatestItem && context.generatedContent && data.posts) {
+        // Create a new history item with updated content
+        const newHistoryId = historyManager.saveContentGeneration(
+          context.article.url,
+          context.article.title,
+          context.generatedContent,
+          postPreferences.language,
+          context.analysis
+        );
+        
+        // Save the posts to the new history item
+        historyManager.savePostGeneration(
+          newHistoryId,
+          data.posts,
+          postPreferences,
+          selectedIndexes
+        );
+        
+        // Notify parent component about the new history item
+        if (onNewHistoryItemCreated) {
+          onNewHistoryItemCreated(newHistoryId);
+        }
+        
+        console.log('📝 Created new history item from old one:', newHistoryId);
+      } else if (currentHistoryId && data.posts) {
+        // Update existing history item if it's the latest
         historyManager.savePostGeneration(
           currentHistoryId,
           data.posts,

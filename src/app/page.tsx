@@ -72,6 +72,8 @@ export default function Home() {
   const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
   const [historicalPosts, setHistoricalPosts] = useState<SocialPostsResult | null>(null);
   const [historicalPreferences, setHistoricalPreferences] = useState<PostGenerationPreferences | null>(null);
+  const [isLatestItem, setIsLatestItem] = useState(true);
+  const [currentHistoryTitle, setCurrentHistoryTitle] = useState<string | null>(null);
 
   // New function to fetch article only
   async function handleFetchArticle(submittedUrl: string) {
@@ -178,7 +180,11 @@ export default function Home() {
   async function handleGenerateContent() {
     if (!article) return;
     
-    console.log('�� Generating content for:', selectedContentType);
+    console.log('🚀 Generating content for:', selectedContentType);
+    
+    // Clear historical data since we're generating fresh content
+    setHistoricalPosts(null);
+    setHistoricalPreferences(null);
     
     try {
       setLoading(true);
@@ -266,6 +272,13 @@ export default function Home() {
         analysisData.analysis
       );
       setCurrentHistoryId(historyId);
+      setIsLatestItem(true);
+      
+      // Get the history item to set the title
+      const historyItem = historyManager.getHistoryItem(historyId);
+      if (historyItem) {
+        setCurrentHistoryTitle(historyItem.title);
+      }
 
       console.log('✅ Content generation completed');
       
@@ -282,6 +295,20 @@ export default function Home() {
     }
   }
 
+  const handleNewHistoryItemCreated = (newHistoryId: string) => {
+    // Update state to reflect the new history item
+    setCurrentHistoryId(newHistoryId);
+    setIsLatestItem(true);
+    
+    // Load the new history item details
+    const newItem = historyManager.getHistoryItem(newHistoryId);
+    if (newItem) {
+      setCurrentHistoryTitle(newItem.title);
+    }
+    
+    console.log('🆕 Switched to new history item:', newHistoryId);
+  };
+
   // Legacy submit handler (keeping for backwards compatibility)
   async function handleSubmit(submittedUrl: string) {
     await handleFetchArticle(submittedUrl);
@@ -294,6 +321,10 @@ export default function Home() {
     setCurrentHistoryId(item.id);
     setDetectedLanguage(item.language);
     setCurrentStep('complete');
+    setCurrentHistoryTitle(item.title);
+    
+    // Check if this is the latest item
+    setIsLatestItem(historyManager.isLatestItem(item.id));
     
     // Reconstruct the context from history
     setArticle({
@@ -336,6 +367,14 @@ export default function Home() {
     setError('');
   };
 
+  const handleLoadLatest = () => {
+    const latest = historyManager.getLatestItem();
+    if (latest) {
+      handleLoadHistoryItem(latest);
+      setHistoryOpen(false);
+    }
+  };
+
   const handleStartNew = () => {
     setArticle(null);
     setAnalysis(null);
@@ -348,6 +387,8 @@ export default function Home() {
     setSelectedContentType('hooks');
     setHistoricalPosts(null);
     setHistoricalPreferences(null);
+    setIsLatestItem(true);
+    setCurrentHistoryTitle(null);
   };
 
   // Request to change URL or content type after generation
@@ -382,6 +423,37 @@ export default function Home() {
             </div>
             
             <div className="flex items-center gap-3">
+              {/* Current History Item Indicator */}
+              {currentHistoryTitle && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 rounded-lg">
+                  <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clipRule="evenodd" />
+                    <path fillRule="evenodd" d="M4 5a2 2 0 012-2 1 1 0 000 2H6a2 2 0 00-2 2v6a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2 1 1 0 100-2 2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V5z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm text-blue-800">
+                    {currentHistoryTitle}
+                  </span>
+                  {!isLatestItem && (
+                    <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
+                      Old
+                    </span>
+                  )}
+                </div>
+              )}
+              
+              {/* Return to Latest Button */}
+              {!isLatestItem && currentHistoryId && (
+                <button
+                  onClick={handleLoadLatest}
+                  className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center"
+                >
+                  <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 1.414L10.586 9.5H7a1 1 0 100 2h3.586l-1.293 1.293a1 1 0 101.414 1.414l3-3a1 1 0 000-1.414z" clipRule="evenodd" />
+                  </svg>
+                  Return to Latest
+                </button>
+              )}
+              
               {(generatedContent || currentStep !== 'urlInput') && (
                 <button
                   onClick={handleStartNew}
@@ -594,6 +666,8 @@ export default function Home() {
               detectedLanguage={detectedLanguage}
               historicalPosts={historicalPosts}
               historicalPreferences={historicalPreferences}
+              isLatestItem={isLatestItem}
+              onNewHistoryItemCreated={handleNewHistoryItemCreated}
             />
           </div>
         )}
@@ -609,6 +683,7 @@ export default function Home() {
         isOpen={historyOpen}
         onClose={() => setHistoryOpen(false)}
         onLoadItem={handleLoadHistoryItem}
+        currentHistoryId={currentHistoryId}
       />
     </div>
   );

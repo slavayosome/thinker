@@ -129,6 +129,16 @@ export class HistoryManager {
     return this.getHistoryState().items;
   }
 
+  getLatestItem(): HistoryItem | undefined {
+    const items = this.getHistoryState().items;
+    return items.length > 0 ? items[0] : undefined;
+  }
+
+  isLatestItem(id: string): boolean {
+    const latest = this.getLatestItem();
+    return latest ? latest.id === id : false;
+  }
+
   getCurrentItem(): HistoryItem | undefined {
     return this.getHistoryState().currentItem;
   }
