@@ -6,7 +6,7 @@ import UrlInput from '@/components/UrlInput';
 import ProgressStatus from '@/components/ProgressStatus';
 import SocialMediaResults from '@/components/SocialMediaResults';
 import History from '@/components/History';
-import { ArticleData, AnalysisResult, ContentResult, ContentType, HistoryItem, Language } from '@/types';
+import { ArticleData, AnalysisResult, ContentResult, ContentType, HistoryItem, Language, SocialPostsResult, PostGenerationPreferences } from '@/types';
 import { historyManager } from '@/lib/history';
 
 const contentTypeOptions = [
@@ -70,6 +70,8 @@ export default function Home() {
   // History state
   const [historyOpen, setHistoryOpen] = useState(false);
   const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
+  const [historicalPosts, setHistoricalPosts] = useState<SocialPostsResult | null>(null);
+  const [historicalPreferences, setHistoricalPreferences] = useState<PostGenerationPreferences | null>(null);
 
   // New function to fetch article only
   async function handleFetchArticle(submittedUrl: string) {
@@ -260,7 +262,8 @@ export default function Home() {
         url,
         article.title,
         contentData.result,
-        detectedLanguage
+        detectedLanguage,
+        analysisData.analysis
       );
       setCurrentHistoryId(historyId);
 
@@ -301,13 +304,35 @@ export default function Home() {
       date_published: ''
     });
     
-    setAnalysis({
-      centralTheme: `Content from: ${item.articleTitle}`,
-      keyMessages: ['Loaded from history'],
-      summary: `Previously analyzed content for ${item.contentType} generation`
-    });
+    // Use the saved analysis if available, otherwise create a basic one
+    if (item.articleAnalysis) {
+      setAnalysis(item.articleAnalysis);
+    } else {
+      setAnalysis({
+        centralTheme: `Content from: ${item.articleTitle}`,
+        keyMessages: ['Loaded from history'],
+        summary: `Previously analyzed content for ${item.contentType} generation`
+      });
+    }
     
-    setGeneratedContent(item.generatedContent);
+    // Mark selected items if posts were generated
+    if (item.selectedContentIndexes && item.generatedContent) {
+      const updatedContent = {
+        ...item.generatedContent,
+        items: item.generatedContent.items.map((contentItem, index) => ({
+          ...contentItem,
+          selected: item.selectedContentIndexes?.includes(index) || false
+        }))
+      };
+      setGeneratedContent(updatedContent);
+    } else {
+      setGeneratedContent(item.generatedContent);
+    }
+    
+    // Set historical posts and preferences
+    setHistoricalPosts(item.generatedPosts || null);
+    setHistoricalPreferences(item.preferences || null);
+    
     setError('');
   };
 
@@ -321,6 +346,8 @@ export default function Home() {
     setUrl('');
     setEditingUrl('');
     setSelectedContentType('hooks');
+    setHistoricalPosts(null);
+    setHistoricalPreferences(null);
   };
 
   // Request to change URL or content type after generation
@@ -333,6 +360,9 @@ export default function Home() {
       setGeneratedContent(null);
       setAnalysis(null);
       setCurrentStep('contentType');
+      // Clear historical posts when changing content type
+      setHistoricalPosts(null);
+      setHistoricalPreferences(null);
     }
   };
 
@@ -562,6 +592,8 @@ export default function Home() {
               onRequestContentTypeChange={() => handleRequestChange('contentType')}
               selectedContentType={selectedContentType}
               detectedLanguage={detectedLanguage}
+              historicalPosts={historicalPosts}
+              historicalPreferences={historicalPreferences}
             />
           </div>
         )}

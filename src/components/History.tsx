@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { HistoryItem, ContentType } from '@/types';
 import { historyManager } from '@/lib/history';
+import { formatDistanceToNow, differenceInMinutes, differenceInHours, differenceInDays, format } from 'date-fns';
 
 interface HistoryProps {
   isOpen: boolean;
@@ -78,18 +79,30 @@ export default function History({ isOpen, onClose, onLoadItem }: HistoryProps) {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffHours / 24);
+    const diffMinutes = differenceInMinutes(now, date);
+    const diffHours = differenceInHours(now, date);
+    const diffDays = differenceInDays(now, date);
     
-    if (diffHours < 1) {
-      return 'Just now';
+    if (diffMinutes < 1) {
+      return 'just now';
+    } else if (diffMinutes < 60) {
+      return `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'} ago`;
     } else if (diffHours < 24) {
-      return `${diffHours}h ago`;
+      return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+    } else if (diffDays === 1) {
+      return 'yesterday';
     } else if (diffDays < 7) {
-      return `${diffDays}d ago`;
+      return `${diffDays} days ago`;
+    } else if (diffDays === 7) {
+      return 'a week ago';
+    } else if (diffDays < 30) {
+      const weeks = Math.floor(diffDays / 7);
+      return `${weeks} week${weeks === 1 ? '' : 's'} ago`;
+    } else if (diffDays < 365) {
+      const months = Math.floor(diffDays / 30);
+      return `${months} month${months === 1 ? '' : 's'} ago`;
     } else {
-      return date.toLocaleDateString();
+      return format(date, 'MMM d, yyyy');
     }
   };
 
@@ -98,40 +111,6 @@ export default function History({ isOpen, onClose, onLoadItem }: HistoryProps) {
       historyManager.clearHistory();
       loadHistory();
     }
-  };
-
-  const handleExportHistory = () => {
-    const exported = historyManager.exportHistory();
-    const blob = new Blob([exported], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `thinker-history-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const handleImportHistory = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      if (historyManager.importHistory(content)) {
-        loadHistory();
-        alert('History imported successfully!');
-      } else {
-        alert('Failed to import history. Please check the file format.');
-      }
-    };
-    reader.readAsText(file);
-    
-    // Reset input
-    e.target.value = '';
   };
 
   if (!isOpen) return null;
@@ -168,33 +147,16 @@ export default function History({ isOpen, onClose, onLoadItem }: HistoryProps) {
         </div>
 
         {/* History Management */}
-        <div className="border-b border-gray-200 p-3">
-          <div className="flex gap-2">
-            <button
-              onClick={handleExportHistory}
-              className="flex-1 px-3 py-2 text-xs bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
-              disabled={historyItems.length === 0}
-            >
-              Export
-            </button>
-            <label className="flex-1 px-3 py-2 text-xs bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors cursor-pointer text-center">
-              Import
-              <input
-                type="file"
-                accept=".json"
-                onChange={handleImportHistory}
-                className="hidden"
-              />
-            </label>
+        {historyItems.length > 0 && (
+          <div className="border-b border-gray-200 p-3">
             <button
               onClick={handleClearHistory}
-              className="flex-1 px-3 py-2 text-xs bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors"
-              disabled={historyItems.length === 0}
+              className="w-full px-3 py-2 text-xs bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors"
             >
-              Clear All
+              Clear All History
             </button>
           </div>
-        </div>
+        )}
 
         {/* History List */}
         <div className="flex-1 overflow-y-auto">
@@ -274,26 +236,47 @@ export default function History({ isOpen, onClose, onLoadItem }: HistoryProps) {
                     )}
                   </div>
 
+                  {/* Article URL */}
+                  <div className="text-xs text-gray-500 mb-2 truncate">
+                    <span className="font-medium">URL:</span> {item.articleUrl}
+                  </div>
+
                   {/* Metadata */}
                   <div className="flex items-center justify-between text-xs text-gray-500">
-                    <div className="flex items-center">
+                    <div className="flex items-center gap-2">
                       <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs">
                         {contentTypeLabels[item.contentType]}
                       </span>
-                      <span className="ml-2">
+                      <span>
                         {item.generatedContent.items.length} items
                       </span>
                     </div>
-                    <span>{formatDate(item.createdAt)}</span>
+                    <span title={format(new Date(item.createdAt), 'PPpp')}>
+                      {formatDate(item.createdAt)}
+                    </span>
                   </div>
+
+                  {/* Analysis preview if available */}
+                  {item.articleAnalysis && (
+                    <div className="mt-2 p-2 bg-blue-50 rounded text-xs text-blue-700">
+                      <span className="font-medium">Theme:</span> {item.articleAnalysis.centralTheme.slice(0, 50)}...
+                    </div>
+                  )}
 
                   {/* Posts indicator */}
                   {item.generatedPosts && (
-                    <div className="mt-2 flex items-center text-xs text-green-600">
-                      <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                      {item.generatedPosts.posts.length} post{item.generatedPosts.posts.length !== 1 ? 's' : ''} generated
+                    <div className="mt-2 flex items-center justify-between text-xs">
+                      <div className="flex items-center text-green-600">
+                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        {item.generatedPosts.posts.length} post{item.generatedPosts.posts.length !== 1 ? 's' : ''} generated
+                      </div>
+                      {item.selectedContentIndexes && (
+                        <span className="text-gray-500">
+                          from {item.selectedContentIndexes.length} selected item{item.selectedContentIndexes.length !== 1 ? 's' : ''}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>

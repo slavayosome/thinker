@@ -29,7 +29,7 @@ Transform any article into engaging social media content with the power of AI. T
 ### 💾 History & Management
 - **Content History** - Save and revisit previously generated content
 - **Quick Access** - Easily reload past articles and regenerate content
-- **Export Options** - Copy content for immediate use
+- **Smart Organization** - See what content types and posts were generated
 
 ## 🛠️ Technology Stack
 

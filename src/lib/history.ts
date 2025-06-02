@@ -1,4 +1,4 @@
-import { HistoryItem, HistoryState, ContentResult, SocialPostsResult, PostGenerationPreferences, Language } from '@/types';
+import { HistoryItem, HistoryState, ContentResult, SocialPostsResult, PostGenerationPreferences, Language, AnalysisResult } from '@/types';
 
 const STORAGE_KEY = 'thinker-history';
 const MAX_HISTORY_ITEMS = 50; // Limit to prevent localStorage bloat
@@ -78,6 +78,7 @@ export class HistoryManager {
     articleTitle: string,
     contentResult: ContentResult,
     language: Language,
+    analysis?: AnalysisResult,
     customTitle?: string
   ): string {
     const history = this.getHistoryState();
@@ -88,6 +89,7 @@ export class HistoryManager {
       title: customTitle || this.generateShortTitle(articleTitle, contentResult.type),
       articleUrl,
       articleTitle,
+      articleAnalysis: analysis,
       contentType: contentResult.type,
       generatedContent: contentResult,
       createdAt: new Date().toISOString(),
@@ -106,7 +108,8 @@ export class HistoryManager {
   savePostGeneration(
     itemId: string,
     posts: SocialPostsResult,
-    preferences: PostGenerationPreferences
+    preferences: PostGenerationPreferences,
+    selectedIndexes: number[]
   ): void {
     const history = this.getHistoryState();
     const itemIndex = history.items.findIndex(item => item.id === itemId);
@@ -114,6 +117,7 @@ export class HistoryManager {
     if (itemIndex >= 0) {
       history.items[itemIndex].generatedPosts = posts;
       history.items[itemIndex].preferences = preferences;
+      history.items[itemIndex].selectedContentIndexes = selectedIndexes;
       history.currentItem = history.items[itemIndex];
       
       this.saveHistory(history);
@@ -175,28 +179,6 @@ export class HistoryManager {
     
     localStorage.removeItem(STORAGE_KEY);
     console.log('🧹 Cleared all history');
-  }
-
-  exportHistory(): string {
-    const history = this.getHistoryState();
-    return JSON.stringify(history, null, 2);
-  }
-
-  importHistory(jsonData: string): boolean {
-    try {
-      const imported = JSON.parse(jsonData);
-      
-      if (imported.items && Array.isArray(imported.items)) {
-        this.saveHistory(imported);
-        console.log(`📥 Imported ${imported.items.length} history items`);
-        return true;
-      }
-      
-      return false;
-    } catch (error) {
-      console.error('Failed to import history:', error);
-      return false;
-    }
   }
 }
 

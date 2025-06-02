@@ -18,6 +18,8 @@ interface SocialMediaResultsProps {
   onRequestContentTypeChange?: () => void;
   selectedContentType?: ContentType;
   detectedLanguage?: Language;
+  historicalPosts?: SocialPostsResult | null;
+  historicalPreferences?: PostGenerationPreferences | null;
 }
 
 interface CollapsibleSectionProps {
@@ -103,17 +105,28 @@ export default function SocialMediaResults({
   onRequestUrlChange,
   onRequestContentTypeChange,
   selectedContentType,
-  detectedLanguage: propDetectedLanguage 
+  detectedLanguage: propDetectedLanguage,
+  historicalPosts,
+  historicalPreferences
 }: SocialMediaResultsProps) {
-  const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+  const [collapsedSections, setCollapsedSections] = useState({
     analysis: false,
     hooks: false,
-    socialPosts: false
+    socialPosts: true
   });
-
-  // Selection state for items (hooks, quotes, etc.)
-  const [selectedIndexes, setSelectedIndexes] = useState<number[]>([]);
+  
+  // Initialize selectedIndexes from generatedContent if items have selected property
+  const getInitialSelectedIndexes = () => {
+    if (context.generatedContent?.items) {
+      return context.generatedContent.items
+        .map((item, index) => item.selected ? index : null)
+        .filter((index): index is number => index !== null);
+    }
+    return [];
+  };
+  
+  const [selectedIndexes, setSelectedIndexes] = useState<number[]>(getInitialSelectedIndexes());
+  const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
   
   // Language detection state
   const [detectedLanguage, setDetectedLanguage] = useState<Language>(propDetectedLanguage || 'english');
@@ -121,22 +134,24 @@ export default function SocialMediaResults({
   const [isDetectingLanguage, setIsDetectingLanguage] = useState(false);
   
   // Post generation preferences - with all defaults explicitly set
-  const [postPreferences, setPostPreferences] = useState<PostGenerationPreferences>({
-    selectedHooks: [],
-    tone: 'authors-voice', // Author's voice as default
-    style: 'storytelling',
-    postType: 'sequence',
-    platform: 'linkedin',
-    language: 'english', // Will be updated after detection
-    contentLength: 'medium',
-    hashtagPreference: 'moderate',
-    emojiUsage: 'minimal',
-    ctaType: 'mixed',
-    targetAudience: 'professionals'
-  });
+  const [postPreferences, setPostPreferences] = useState<PostGenerationPreferences>(
+    historicalPreferences || {
+      selectedHooks: [],
+      tone: 'authors-voice', // Author's voice as default
+      style: 'storytelling',
+      postType: 'sequence',
+      platform: 'linkedin',
+      language: 'english', // Will be updated after detection
+      contentLength: 'medium',
+      hashtagPreference: 'moderate',
+      emojiUsage: 'minimal',
+      ctaType: 'mixed',
+      targetAudience: 'professionals'
+    }
+  );
 
-  // Generated posts state
-  const [generatedPosts, setGeneratedPosts] = useState<SocialPostsResult | null>(null);
+  // Generated posts state - initialize with historical posts if available
+  const [generatedPosts, setGeneratedPosts] = useState<SocialPostsResult | null>(historicalPosts || null);
   const [isGeneratingPosts, setIsGeneratingPosts] = useState(false);
   const [postGenerationError, setPostGenerationError] = useState<string | null>(null);
 
@@ -149,6 +164,47 @@ export default function SocialMediaResults({
       setDetectedLanguage(propDetectedLanguage);
     }
   }, [propDetectedLanguage]);
+
+  // Reset state when context changes (new article loaded)
+  useEffect(() => {
+    // Reset selected indexes based on the new context
+    const newSelectedIndexes = (() => {
+      if (context.generatedContent?.items) {
+        return context.generatedContent.items
+          .map((item, index) => item.selected ? index : null)
+          .filter((index): index is number => index !== null);
+      }
+      return [];
+    })();
+    
+    setSelectedIndexes(newSelectedIndexes);
+    
+    // If this is a different article (different history ID), clear generated posts
+    // Otherwise, use historical posts if available
+    if (historicalPosts) {
+      setGeneratedPosts(historicalPosts);
+    } else {
+      setGeneratedPosts(null);
+    }
+    
+    // Use historical preferences if available
+    if (historicalPreferences) {
+      setPostPreferences(historicalPreferences);
+    }
+    
+    // Clear any error messages
+    setPostGenerationError(null);
+    
+    // Update post preferences with the new selection (only if no historical preferences)
+    if (!historicalPreferences) {
+      setPostPreferences(prev => ({
+        ...prev,
+        selectedHooks: newSelectedIndexes
+      }));
+    }
+    
+    console.log('🔄 Context changed, resetting state');
+  }, [context.article?.url, context.generatedContent, currentHistoryId, historicalPosts, historicalPreferences]);
 
   // Detect language when context is available
   useEffect(() => {
@@ -193,7 +249,7 @@ export default function SocialMediaResults({
     detectLanguage();
   }, [context.article]);
 
-  const toggleSection = (section: string) => {
+  const toggleSection = (section: keyof typeof collapsedSections) => {
     setCollapsedSections(prev => ({
       ...prev,
       [section]: !prev[section]
@@ -278,7 +334,8 @@ export default function SocialMediaResults({
         historyManager.savePostGeneration(
           currentHistoryId,
           data.posts,
-          postPreferences
+          postPreferences,
+          selectedIndexes
         );
       }
       

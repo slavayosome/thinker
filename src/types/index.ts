@@ -107,8 +107,10 @@ export interface HistoryItem {
   title: string;
   articleUrl: string;
   articleTitle: string;
+  articleAnalysis?: AnalysisResult;
   contentType: ContentType;
   generatedContent: ContentResult;
+  selectedContentIndexes?: number[];
   generatedPosts?: SocialPostsResult;
   preferences?: PostGenerationPreferences;
   createdAt: string;
@@ -131,3 +133,20 @@ export type EmojiUsage = 'none' | 'minimal' | 'moderate' | 'heavy';
 export type CTAType = 'question' | 'action' | 'share' | 'comment' | 'poll' | 'mixed';
 export type TargetAudience = 'general' | 'professionals' | 'entrepreneurs' | 'students' | 'executives' | 'creators';
 export type ContentType = 'hooks' | 'quotes' | 'key-insights' | 'statistics' | 'questions' | 'takeaways';
+
+export interface SocialMediaResultsProps {
+  context: {
+    article: ArticleData | null;
+    analysis: AnalysisResult | null;
+    hooks?: HooksResult | null;
+    generatedContent?: ContentResult;
+  };
+  currentHistoryId?: string | null;
+  currentUrl?: string;
+  onRequestUrlChange?: () => void;
+  onRequestContentTypeChange?: () => void;
+  selectedContentType?: ContentType;
+  detectedLanguage?: Language;
+  historicalPosts?: SocialPostsResult | null;
+  historicalPreferences?: PostGenerationPreferences | null;
+}
