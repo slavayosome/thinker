@@ -2,7 +2,23 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+### Environment Setup
+
+1. Create a `.env.local` file in the root directory:
+```
+OPENAI_API_KEY=your_openai_api_key_here
+```
+
+**Important**: Never use `NEXT_PUBLIC_` prefix for API keys as it exposes them to the client-side.
+
+### Prerequisites
+
+Make sure you have:
+- Node.js installed
+- OpenAI API key
+- Parser service running on port 3001
+
+### Running the Development Server
 
 ```bash
 npm run dev
@@ -17,6 +33,21 @@ bun dev
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+## Troubleshooting
+
+### Common URL Processing Errors
+
+1. **"Parser service error"**: Make sure the parser service is running on port 3001
+2. **"OpenAI API error"**: Check that your `OPENAI_API_KEY` is set correctly in `.env.local`
+3. **"No content found"**: The URL may not contain readable article content
+4. **Network errors**: Check your internet connection and service availability
+
+### Testing the Parser Service
+
+```bash
+curl "http://localhost:3001/parser?url=https://example.com"
+```
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
