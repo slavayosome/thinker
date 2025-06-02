@@ -410,7 +410,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       {/* Header with History Button */}
-      <div className="bg-white shadow-sm border-b border-gray-200 mb-8">
+      <div className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center">
@@ -423,37 +423,6 @@ export default function Home() {
             </div>
             
             <div className="flex items-center gap-3">
-              {/* Current History Item Indicator */}
-              {currentHistoryTitle && (
-                <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 rounded-lg">
-                  <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clipRule="evenodd" />
-                    <path fillRule="evenodd" d="M4 5a2 2 0 012-2 1 1 0 000 2H6a2 2 0 00-2 2v6a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2 1 1 0 100-2 2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V5z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-sm text-blue-800">
-                    {currentHistoryTitle}
-                  </span>
-                  {!isLatestItem && (
-                    <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
-                      Old
-                    </span>
-                  )}
-                </div>
-              )}
-              
-              {/* Return to Latest Button */}
-              {!isLatestItem && currentHistoryId && (
-                <button
-                  onClick={handleLoadLatest}
-                  className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center"
-                >
-                  <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 1.414L10.586 9.5H7a1 1 0 100 2h3.586l-1.293 1.293a1 1 0 101.414 1.414l3-3a1 1 0 000-1.414z" clipRule="evenodd" />
-                  </svg>
-                  Return to Latest
-                </button>
-              )}
-              
               {(generatedContent || currentStep !== 'urlInput') && (
                 <button
                   onClick={handleStartNew}
@@ -478,9 +447,103 @@ export default function Home() {
             </div>
           </div>
         </div>
+        
+        {/* History Item Status Bar */}
+        {currentHistoryTitle && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-t border-gray-200 animate-fadeInDown">
+            <div className="max-w-4xl mx-auto px-4 py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  {/* Working With Label */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V8z" clipRule="evenodd" />
+                      </svg>
+                      <span className="font-medium">Working with:</span>
+                    </div>
+                    
+                    {/* History Item Title */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-900 max-w-xs truncate">
+                        {currentHistoryTitle}
+                      </span>
+                      
+                      {/* Status Badge */}
+                      {!isLatestItem ? (
+                        <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-800 border border-amber-200 animate-pulse">
+                          <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 0016 0zm-2-5a1 1 0 00-1 1v4a1 1 0 102 0v-4a1 1 0 00-1-1zm0-2a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                          </svg>
+                          Previous Version
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800 border border-green-200">
+                          <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 0016 0zm-1.293-4.293a1 1 0 010-1.414L10 11l1.293 1.293a1 1 0 001.414-1.414l-2-2a1 1 0 00-1.414 0l-2 2a1 1 0 001.414 1.414L10 11l-1.293 1.293a1 1 0 001.414 0z" clipRule="evenodd" />
+                          </svg>
+                          Latest
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Article Info */}
+                  {article && (
+                    <div className="hidden sm:flex items-center gap-2 text-xs text-gray-500 border-l border-gray-300 pl-4">
+                      <svg className="w-3.5 h-3.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm3 1h6v4H7V5zm6 6H7v2h6v-2z" clipRule="evenodd" />
+                      </svg>
+                      <span className="truncate max-w-xs" title={article.title}>
+                        {article.title}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2">
+                  {!isLatestItem && (
+                    <>
+                      {/* Info Message - Hidden on mobile */}
+                      <div className="hidden md:block text-xs text-amber-700 bg-amber-50 px-3 py-1.5 rounded-md mr-2">
+                        <span className="font-medium">⚡ Generating new posts will create a new version</span>
+                      </div>
+                      
+                      {/* Return to Latest Button */}
+                      <button
+                        onClick={handleLoadLatest}
+                        className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
+                      >
+                        <svg className="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                        <span className="hidden sm:inline">Jump to Latest</span>
+                        <span className="sm:hidden">Latest</span>
+                      </button>
+                    </>
+                  )}
+                  
+                  {/* View in History Button */}
+                  <button
+                    onClick={() => setHistoryOpen(true)}
+                    className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+                  >
+                    <svg className="w-4 h-4 mr-1.5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clipRule="evenodd" />
+                      <path fillRule="evenodd" d="M4 5a2 2 0 012-2 1 1 0 000 2H6a2 2 0 00-2 2v6a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2 1 1 0 100-2 2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V5z" clipRule="evenodd" />
+                    </svg>
+                    <span className="hidden sm:inline">View in History</span>
+                    <span className="sm:hidden">History</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      <main className="max-w-4xl mx-auto py-12 px-4">
+      <main className="max-w-4xl mx-auto py-8 px-4">
         {/* Header */}
         <div className="text-center mb-8 animate-fadeInUp">
           <h1 className="text-4xl font-bold text-gray-800 mb-2">
