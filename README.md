@@ -13,14 +13,6 @@ Transform any article into engaging social media content with the power of AI. T
 - **Responsive Design** - Perfect experience across desktop, tablet, and mobile
 - **Elegant Animations** - Smooth transitions and hover effects throughout
 
-### 🎯 Content Generation Types
-- **🪝 Hooks** - Attention-grabbing opening lines
-- **💬 Quotes** - Powerful, quotable statements  
-- **💡 Key Insights** - Most important learnings
-- **📊 Statistics** - Compelling data points
-- **❓ Questions** - Discussion starters
-- **📝 Takeaways** - Actionable advice
-
 ### 🚀 Smart Analysis
 - **Content Type Detection** - AI automatically detects which content types work best for each article
 - **Language Detection** - Supports multiple languages with automatic detection
