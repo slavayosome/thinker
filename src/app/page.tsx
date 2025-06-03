@@ -257,7 +257,6 @@ export default function Home() {
   const handleLoadHistoryItem = (item: HistoryItem) => {
     setUrl(item.articleUrl);
     setEditingUrl(item.articleUrl);
-    setSelectedContentType(item.contentType);
     setCurrentHistoryId(item.id);
     setDetectedLanguage(item.language);
     setCurrentStep('complete');
@@ -282,7 +281,7 @@ export default function Home() {
       setAnalysis({
         centralTheme: `Content from: ${item.articleTitle}`,
         keyMessages: ['Loaded from history'],
-        summary: `Previously analyzed content for ${item.contentType} generation`
+        summary: `Previously analyzed content for key insights generation`
       });
     }
     
@@ -324,7 +323,6 @@ export default function Home() {
     setError('');
     setUrl('');
     setEditingUrl('');
-    setSelectedContentType('hooks');
     setHistoricalPosts(null);
     setHistoricalPreferences(null);
     setIsLatestItem(true);
@@ -332,26 +330,10 @@ export default function Home() {
     setDetectedLanguage('english');
   };
 
-  // Request to change URL or content type after generation
-  const handleRequestChange = (type: 'url' | 'contentType') => {
-    if (type === 'url') {
-      // Clear everything and start fresh
-      handleStartNew();
-    } else {
-      // Go back to content type selection
-      setGeneratedContent(null);
-      setAnalysis(null);
-      setCurrentStep('contentType');
-      // Clear historical posts when changing content type
-      setHistoricalPosts(null);
-      setHistoricalPreferences(null);
-      // Reset detected language to ensure it's re-detected for new content
-      setDetectedLanguage('english');
-      // Clear the current history ID to ensure a new history item is created
-      setCurrentHistoryId(null);
-      // Mark as latest item since we're creating new content
-      setIsLatestItem(true);
-    }
+  // Request to change URL after generation
+  const handleRequestChange = (type: 'url') => {
+    // Clear everything and start fresh
+    handleStartNew();
   };
 
   return (
@@ -464,20 +446,12 @@ export default function Home() {
                     <div className="flex items-center gap-1.5">
                       <div className="flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-gray-100 rounded-md">
                         <span className="text-xs sm:text-sm">
-                          {contentTypeOptions.find(opt => opt.value === selectedContentType)?.icon}
+                          💡
                         </span>
                         <span className="text-xs sm:text-sm font-medium text-gray-700">
-                          {contentTypeOptions.find(opt => opt.value === selectedContentType)?.label}
+                          Key Insights
                         </span>
                       </div>
-                      {generatedContent && (
-                        <button
-                          onClick={() => handleRequestChange('contentType')}
-                          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                        >
-                          Change
-                        </button>
-                      )}
                     </div>
 
                     {/* History Title - Hidden on smaller screens */}
@@ -513,12 +487,37 @@ export default function Home() {
       <main className="max-w-4xl mx-auto py-6 sm:py-8 px-3 sm:px-4">
         {/* Header */}
         <div className="text-center mb-6 sm:mb-8 animate-fadeInUp">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 mb-2">
-            Transform Articles into Social Media Content
-          </h1>
-          <p className="text-base sm:text-lg md:text-xl text-gray-600 px-4 sm:px-0">
-            Choose what to extract, paste any article URL, and get instant analysis with optimized social media content
-          </p>
+          {!article ? (
+            <>
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 mb-2">
+                Transform Articles into Social Media Content
+              </h1>
+              <p className="text-base sm:text-lg md:text-xl text-gray-600 px-4 sm:px-0">
+                Paste any article URL and get instant analysis with optimized social media content
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 mb-2">
+                {/* Show English title by default, original title for non-English articles */}
+                {analysis?.centralTheme && detectedLanguage !== 'english' ? (
+                  <div className="space-y-2">
+                    <div className="text-lg sm:text-xl md:text-2xl text-gray-600 font-medium">
+                      {analysis.centralTheme}
+                    </div>
+                    <div className="text-base sm:text-lg md:text-xl text-gray-500 font-normal">
+                      Original: {article.title}
+                    </div>
+                  </div>
+                ) : (
+                  article.title
+                )}
+              </h1>
+              <p className="text-base sm:text-lg md:text-xl text-gray-600 px-4 sm:px-0">
+                {article.author ? `by ${article.author}` : 'Article Analysis & Social Media Content Generation'}
+              </p>
+            </>
+          )}
         </div>
 
         {/* Loading States */}
@@ -605,8 +604,6 @@ export default function Home() {
               currentHistoryId={currentHistoryId}
               currentUrl={url}
               onRequestUrlChange={() => handleRequestChange('url')}
-              onRequestContentTypeChange={() => handleRequestChange('contentType')}
-              selectedContentType={selectedContentType}
               detectedLanguage={detectedLanguage}
               historicalPosts={historicalPosts}
               historicalPreferences={historicalPreferences}
