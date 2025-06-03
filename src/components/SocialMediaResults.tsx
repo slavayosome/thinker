@@ -1,6 +1,6 @@
 import { ChainContext } from '@/lib/promptChain';
-import { useState, useEffect } from 'react';
-import { PostGenerationPreferences, PostTone, PostType, Platform, SocialPostsResult, Language, ArticleData, AnalysisResult, HooksResult, ContentResult, PostStyle } from '@/types';
+import { useState, useEffect, useCallback } from 'react';
+import { PostGenerationPreferences, PostTone, PostType, Platform, SocialPostsResult, Language, ArticleData, AnalysisResult, HooksResult, ContentResult, PostStyle, HookStyle, MessageStyle } from '@/types';
 import { historyManager } from '@/lib/history';
 import { AppError, createError, handleFetchError, parseApiError } from '@/lib/errorUtils';
 
@@ -104,6 +104,401 @@ const languageOptions = [
   { value: 'german', label: 'German (Deutsch)', flag: '🇩🇪' }
 ];
 
+// Enhanced style presets that automatically configure advanced settings based on Style + Target Audience matrix
+const stylePresets = {
+  // Professional Style Presets
+  'professional-general': {
+    tone: 'professional',
+    hookStyle: 'statistic',
+    messageStyle: 'bullet-points',
+    ctaType: 'soft-invitation',
+    contentLength: 'medium',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'minimal'
+  },
+  'professional-professionals': {
+    tone: 'professional',
+    hookStyle: 'statistic',
+    messageStyle: 'bullet-points',
+    ctaType: 'direct-ask',
+    contentLength: 'medium',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'minimal'
+  },
+  'professional-entrepreneurs': {
+    tone: 'professional',
+    hookStyle: 'statistic',
+    messageStyle: 'case-study',
+    ctaType: 'value-proposition',
+    contentLength: 'medium',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'minimal'
+  },
+  'professional-students': {
+    tone: 'professional',
+    hookStyle: 'problem-focused',
+    messageStyle: 'step-by-step',
+    ctaType: 'soft-invitation',
+    contentLength: 'long',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'minimal'
+  },
+  'professional-executives': {
+    tone: 'professional',
+    hookStyle: 'statistic',
+    messageStyle: 'compare-contrast',
+    ctaType: 'direct-ask',
+    contentLength: 'short',
+    hashtagPreference: 'minimal',
+    emojiUsage: 'none'
+  },
+  'professional-creators': {
+    tone: 'professional',
+    hookStyle: 'statistic',
+    messageStyle: 'how-to',
+    ctaType: 'community-building',
+    contentLength: 'medium',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'minimal'
+  },
+
+  // Engaging Style Presets
+  'engaging-general': {
+    tone: 'enthusiastic',
+    hookStyle: 'curiosity-gap',
+    messageStyle: 'narrative',
+    ctaType: 'challenge',
+    contentLength: 'medium',
+    hashtagPreference: 'comprehensive',
+    emojiUsage: 'moderate'
+  },
+  'engaging-professionals': {
+    tone: 'enthusiastic',
+    hookStyle: 'curiosity-gap',
+    messageStyle: 'narrative',
+    ctaType: 'curiosity-driven',
+    contentLength: 'medium',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'moderate'
+  },
+  'engaging-entrepreneurs': {
+    tone: 'enthusiastic',
+    hookStyle: 'bold-statement',
+    messageStyle: 'narrative',
+    ctaType: 'challenge',
+    contentLength: 'medium',
+    hashtagPreference: 'comprehensive',
+    emojiUsage: 'moderate'
+  },
+  'engaging-students': {
+    tone: 'enthusiastic',
+    hookStyle: 'question',
+    messageStyle: 'how-to',
+    ctaType: 'community-building',
+    contentLength: 'long',
+    hashtagPreference: 'comprehensive',
+    emojiUsage: 'moderate'
+  },
+  'engaging-executives': {
+    tone: 'thoughtful',
+    hookStyle: 'controversial',
+    messageStyle: 'narrative',
+    ctaType: 'curiosity-driven',
+    contentLength: 'medium',
+    hashtagPreference: 'minimal',
+    emojiUsage: 'minimal'
+  },
+  'engaging-creators': {
+    tone: 'enthusiastic',
+    hookStyle: 'direct-address',
+    messageStyle: 'narrative',
+    ctaType: 'community-building',
+    contentLength: 'medium',
+    hashtagPreference: 'comprehensive',
+    emojiUsage: 'moderate'
+  },
+
+  // Educational Style Presets
+  'educational-general': {
+    tone: 'thoughtful',
+    hookStyle: 'problem-focused',
+    messageStyle: 'step-by-step',
+    ctaType: 'soft-invitation',
+    contentLength: 'long',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'minimal'
+  },
+  'educational-professionals': {
+    tone: 'thoughtful',
+    hookStyle: 'problem-focused',
+    messageStyle: 'how-to',
+    ctaType: 'value-proposition',
+    contentLength: 'long',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'minimal'
+  },
+  'educational-entrepreneurs': {
+    tone: 'thoughtful',
+    hookStyle: 'problem-focused',
+    messageStyle: 'case-study',
+    ctaType: 'value-proposition',
+    contentLength: 'long',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'minimal'
+  },
+  'educational-students': {
+    tone: 'thoughtful',
+    hookStyle: 'question',
+    messageStyle: 'step-by-step',
+    ctaType: 'soft-invitation',
+    contentLength: 'long',
+    hashtagPreference: 'comprehensive',
+    emojiUsage: 'minimal'
+  },
+  'educational-executives': {
+    tone: 'professional',
+    hookStyle: 'statistic',
+    messageStyle: 'compare-contrast',
+    ctaType: 'direct-ask',
+    contentLength: 'medium',
+    hashtagPreference: 'minimal',
+    emojiUsage: 'none'
+  },
+  'educational-creators': {
+    tone: 'conversational',
+    hookStyle: 'question',
+    messageStyle: 'how-to',
+    ctaType: 'community-building',
+    contentLength: 'long',
+    hashtagPreference: 'comprehensive',
+    emojiUsage: 'moderate'
+  },
+
+  // Authentic Style Presets
+  'authentic-general': {
+    tone: 'conversational',
+    hookStyle: 'story-opener',
+    messageStyle: 'personal-reflection',
+    ctaType: 'conversational',
+    contentLength: 'medium',
+    hashtagPreference: 'minimal',
+    emojiUsage: 'moderate'
+  },
+  'authentic-professionals': {
+    tone: 'conversational',
+    hookStyle: 'story-opener',
+    messageStyle: 'personal-reflection',
+    ctaType: 'soft-invitation',
+    contentLength: 'medium',
+    hashtagPreference: 'minimal',
+    emojiUsage: 'minimal'
+  },
+  'authentic-entrepreneurs': {
+    tone: 'conversational',
+    hookStyle: 'story-opener',
+    messageStyle: 'personal-reflection',
+    ctaType: 'challenge',
+    contentLength: 'medium',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'moderate'
+  },
+  'authentic-students': {
+    tone: 'casual',
+    hookStyle: 'story-opener',
+    messageStyle: 'personal-reflection',
+    ctaType: 'community-building',
+    contentLength: 'medium',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'moderate'
+  },
+  'authentic-executives': {
+    tone: 'thoughtful',
+    hookStyle: 'story-opener',
+    messageStyle: 'personal-reflection',
+    ctaType: 'conversational',
+    contentLength: 'short',
+    hashtagPreference: 'minimal',
+    emojiUsage: 'minimal'
+  },
+  'authentic-creators': {
+    tone: 'casual',
+    hookStyle: 'direct-address',
+    messageStyle: 'personal-reflection',
+    ctaType: 'community-building',
+    contentLength: 'medium',
+    hashtagPreference: 'comprehensive',
+    emojiUsage: 'moderate'
+  },
+
+  // Data-Driven Style Presets
+  'data-driven-general': {
+    tone: 'professional',
+    hookStyle: 'statistic',
+    messageStyle: 'compare-contrast',
+    ctaType: 'value-proposition',
+    contentLength: 'long',
+    hashtagPreference: 'minimal',
+    emojiUsage: 'none'
+  },
+  'data-driven-professionals': {
+    tone: 'professional',
+    hookStyle: 'statistic',
+    messageStyle: 'compare-contrast',
+    ctaType: 'direct-ask',
+    contentLength: 'long',
+    hashtagPreference: 'minimal',
+    emojiUsage: 'none'
+  },
+  'data-driven-entrepreneurs': {
+    tone: 'professional',
+    hookStyle: 'statistic',
+    messageStyle: 'case-study',
+    ctaType: 'value-proposition',
+    contentLength: 'long',
+    hashtagPreference: 'minimal',
+    emojiUsage: 'none'
+  },
+  'data-driven-students': {
+    tone: 'thoughtful',
+    hookStyle: 'statistic',
+    messageStyle: 'step-by-step',
+    ctaType: 'soft-invitation',
+    contentLength: 'long',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'none'
+  },
+  'data-driven-executives': {
+    tone: 'professional',
+    hookStyle: 'statistic',
+    messageStyle: 'bullet-points',
+    ctaType: 'direct-ask',
+    contentLength: 'short',
+    hashtagPreference: 'none',
+    emojiUsage: 'none'
+  },
+  'data-driven-creators': {
+    tone: 'professional',
+    hookStyle: 'statistic',
+    messageStyle: 'how-to',
+    ctaType: 'value-proposition',
+    contentLength: 'long',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'none'
+  },
+
+  // Community-Building Style Presets
+  'community-building-general': {
+    tone: 'casual',
+    hookStyle: 'direct-address',
+    messageStyle: 'how-to',
+    ctaType: 'community-building',
+    contentLength: 'short',
+    hashtagPreference: 'comprehensive',
+    emojiUsage: 'moderate'
+  },
+  'community-building-professionals': {
+    tone: 'conversational',
+    hookStyle: 'direct-address',
+    messageStyle: 'how-to',
+    ctaType: 'community-building',
+    contentLength: 'medium',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'minimal'
+  },
+  'community-building-entrepreneurs': {
+    tone: 'enthusiastic',
+    hookStyle: 'direct-address',
+    messageStyle: 'how-to',
+    ctaType: 'challenge',
+    contentLength: 'medium',
+    hashtagPreference: 'comprehensive',
+    emojiUsage: 'moderate'
+  },
+  'community-building-students': {
+    tone: 'casual',
+    hookStyle: 'question',
+    messageStyle: 'how-to',
+    ctaType: 'community-building',
+    contentLength: 'medium',
+    hashtagPreference: 'comprehensive',
+    emojiUsage: 'moderate'
+  },
+  'community-building-executives': {
+    tone: 'professional',
+    hookStyle: 'direct-address',
+    messageStyle: 'how-to',
+    ctaType: 'direct-ask',
+    contentLength: 'short',
+    hashtagPreference: 'minimal',
+    emojiUsage: 'minimal'
+  },
+  'community-building-creators': {
+    tone: 'casual',
+    hookStyle: 'direct-address',
+    messageStyle: 'narrative',
+    ctaType: 'community-building',
+    contentLength: 'short',
+    hashtagPreference: 'comprehensive',
+    emojiUsage: 'heavy'
+  },
+
+  // Thought-Leadership Style Presets
+  'thought-leadership-general': {
+    tone: 'thoughtful',
+    hookStyle: 'controversial',
+    messageStyle: 'myth-busting',
+    ctaType: 'curiosity-driven',
+    contentLength: 'long',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'none'
+  },
+  'thought-leadership-professionals': {
+    tone: 'professional',
+    hookStyle: 'controversial',
+    messageStyle: 'myth-busting',
+    ctaType: 'curiosity-driven',
+    contentLength: 'long',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'none'
+  },
+  'thought-leadership-entrepreneurs': {
+    tone: 'thoughtful',
+    hookStyle: 'bold-statement',
+    messageStyle: 'myth-busting',
+    ctaType: 'challenge',
+    contentLength: 'long',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'none'
+  },
+  'thought-leadership-students': {
+    tone: 'thoughtful',
+    hookStyle: 'question',
+    messageStyle: 'myth-busting',
+    ctaType: 'soft-invitation',
+    contentLength: 'long',
+    hashtagPreference: 'moderate',
+    emojiUsage: 'minimal'
+  },
+  'thought-leadership-executives': {
+    tone: 'professional',
+    hookStyle: 'controversial',
+    messageStyle: 'compare-contrast',
+    ctaType: 'direct-ask',
+    contentLength: 'medium',
+    hashtagPreference: 'minimal',
+    emojiUsage: 'none'
+  },
+  'thought-leadership-creators': {
+    tone: 'thoughtful',
+    hookStyle: 'controversial',
+    messageStyle: 'myth-busting',
+    ctaType: 'curiosity-driven',
+    contentLength: 'long',
+    hashtagPreference: 'comprehensive',
+    emojiUsage: 'minimal'
+  }
+} as const;
+
 export default function SocialMediaResults({ 
   context, 
   currentHistoryId, 
@@ -138,18 +533,25 @@ export default function SocialMediaResults({
   
   // Post generation preferences
   const [postPreferences, setPostPreferences] = useState<PostGenerationPreferences>(
-    historicalPreferences || {
+    historicalPreferences ? {
+      ...historicalPreferences,
+      // Ensure backwards compatibility with new authorVoice field
+      authorVoice: historicalPreferences.authorVoice ?? false
+    } : {
       selectedHooks: [],
-      tone: 'authors-voice',
-      style: 'storytelling',
-      postType: 'sequence',
+      tone: 'professional',
+      style: 'professional',
+      postType: 'single',
       platform: 'linkedin',
       language: 'english',
       contentLength: 'medium',
       hashtagPreference: 'moderate',
       emojiUsage: 'minimal',
-      ctaType: 'mixed',
-      targetAudience: 'professionals'
+      ctaType: 'soft-invitation',
+      targetAudience: 'professionals',
+      hookStyle: 'curiosity-gap',
+      messageStyle: 'narrative',
+      authorVoice: true
     }
   );
 
@@ -158,6 +560,119 @@ export default function SocialMediaResults({
   const [isGeneratingPosts, setIsGeneratingPosts] = useState(false);
   const [postGenerationError, setPostGenerationError] = useState<AppError | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [recommendedSequenceLength, setRecommendedSequenceLength] = useState<number>(3);
+
+  // Dynamic sequence length analysis based on selected content
+  const analyzeSequenceLength = useCallback((selectedContent: string[]): number => {
+    console.log('🧮 Starting sequence length analysis for:', selectedContent.length, 'items');
+    
+    if (selectedContent.length === 0) {
+      console.log('📝 No content selected, returning default length: 3');
+      return 3;
+    }
+
+    // Calculate content complexity metrics
+    const totalWords = selectedContent.reduce((sum, content) => sum + content.split(' ').length, 0);
+    const avgWordsPerItem = totalWords / selectedContent.length;
+    const uniqueTopics = new Set();
+    
+    // Extract key topics/themes (simplified analysis)
+    selectedContent.forEach(content => {
+      const keywords = content.toLowerCase()
+        .split(/\W+/)
+        .filter(word => word.length > 4)
+        .slice(0, 3); // Take first 3 significant words as topic indicators
+      keywords.forEach(keyword => uniqueTopics.add(keyword));
+    });
+
+    const topicDiversity = uniqueTopics.size;
+    const contentDepth = avgWordsPerItem;
+    const itemCount = selectedContent.length;
+
+    console.log('📊 Content analysis metrics:', {
+      totalWords,
+      avgWordsPerItem: Math.round(avgWordsPerItem),
+      topicDiversity,
+      uniqueTopics: Array.from(uniqueTopics),
+      itemCount,
+      platform: postPreferences.platform,
+      audience: postPreferences.targetAudience
+    });
+
+    // Dynamic sequence length algorithm
+    let sequenceLength = 3; // Base length
+    const adjustments = [];
+
+    // Adjust based on content depth
+    if (contentDepth > 30) {
+      sequenceLength += 1;
+      adjustments.push(`+1 for content depth (${Math.round(contentDepth)} words/item > 30)`);
+    }
+    if (contentDepth > 50) {
+      sequenceLength += 1;
+      adjustments.push(`+1 for high content depth (${Math.round(contentDepth)} words/item > 50)`);
+    }
+
+    // Adjust based on topic diversity
+    if (topicDiversity > 8) {
+      sequenceLength += 1;
+      adjustments.push(`+1 for topic diversity (${topicDiversity} topics > 8)`);
+    }
+    if (topicDiversity > 15) {
+      sequenceLength += 1;
+      adjustments.push(`+1 for high topic diversity (${topicDiversity} topics > 15)`);
+    }
+
+    // Adjust based on item count
+    if (itemCount > 5) {
+      sequenceLength += 1;
+      adjustments.push(`+1 for item count (${itemCount} items > 5)`);
+    }
+    if (itemCount > 8) {
+      sequenceLength += 1;
+      adjustments.push(`+1 for high item count (${itemCount} items > 8)`);
+    }
+
+    // Platform-specific adjustments
+    const beforePlatformAdjustment = sequenceLength;
+    if (postPreferences.platform === 'twitter') {
+      sequenceLength = Math.min(sequenceLength, 5); // Twitter threads shouldn't be too long
+      if (beforePlatformAdjustment > 5) {
+        adjustments.push(`Capped at 5 for Twitter (was ${beforePlatformAdjustment})`);
+      }
+    } else if (postPreferences.platform === 'linkedin') {
+      sequenceLength = Math.min(sequenceLength, 7); // LinkedIn can handle longer sequences
+      if (beforePlatformAdjustment > 7) {
+        adjustments.push(`Capped at 7 for LinkedIn (was ${beforePlatformAdjustment})`);
+      }
+    }
+
+    // Audience-specific adjustments
+    const beforeAudienceAdjustment = sequenceLength;
+    if (postPreferences.targetAudience === 'executives') {
+      sequenceLength = Math.min(sequenceLength, 4); // Executives prefer concise content
+      if (beforeAudienceAdjustment > 4) {
+        adjustments.push(`Capped at 4 for executives (was ${beforeAudienceAdjustment})`);
+      }
+    } else if (postPreferences.targetAudience === 'students') {
+      sequenceLength = Math.min(sequenceLength + 1, 6); // Students benefit from detailed sequences
+      if (beforeAudienceAdjustment < 6) {
+        adjustments.push(`+1 for students audience (educational benefit)`);
+      }
+    }
+
+    const finalLength = Math.max(2, Math.min(sequenceLength, 7)); // Ensure range 2-7
+    
+    console.log(`🎯 Sequence length calculation complete:`, {
+      baseLength: 3,
+      adjustments,
+      calculatedLength: sequenceLength,
+      finalLength,
+      reasoning: adjustments.length > 0 ? adjustments.join(', ') : 'No adjustments needed'
+    });
+
+    return finalLength;
+  }, [postPreferences.platform, postPreferences.targetAudience]);
 
   // Update local state when props change
   useEffect(() => {
@@ -171,6 +686,26 @@ export default function SocialMediaResults({
       }
     }
   }, [propDetectedLanguage, languageDetectionStatus?.wasAutoDetected]);
+
+  // Update recommended sequence length when selection changes
+  useEffect(() => {
+    const items = context.hooks
+      ? context.hooks.hooks
+      : context.generatedContent?.items.map(item => item.content) || [];
+    
+    const selectedContent = selectedIndexes.map(index => items[index]).filter(Boolean);
+    const newLength = analyzeSequenceLength(selectedContent);
+    
+    console.log(`🔢 Sequence length analysis:`, {
+      selectedCount: selectedIndexes.length,
+      selectedContent: selectedContent.map(c => c.substring(0, 50) + '...'),
+      recommendedLength: newLength,
+      platform: postPreferences.platform,
+      audience: postPreferences.targetAudience
+    });
+    
+    setRecommendedSequenceLength(newLength);
+  }, [selectedIndexes, context.hooks, context.generatedContent, postPreferences.platform, postPreferences.targetAudience, analyzeSequenceLength]);
 
   // Reset state when context changes
   useEffect(() => {
@@ -192,7 +727,11 @@ export default function SocialMediaResults({
     }
     
     if (historicalPreferences) {
-      setPostPreferences(historicalPreferences);
+      setPostPreferences({
+        ...historicalPreferences,
+        // Ensure backwards compatibility with new authorVoice field
+        authorVoice: historicalPreferences.authorVoice ?? false
+      });
     }
     
     setPostGenerationError(null);
@@ -288,7 +827,10 @@ export default function SocialMediaResults({
           article: context.article,
           analysis: context.analysis,
           hooks: hooksPayload,
-          preferences: postPreferences
+          preferences: {
+            ...postPreferences,
+            sequenceLength: postPreferences.postType === 'sequence' ? recommendedSequenceLength : undefined
+          }
         }),
       });
 
@@ -469,16 +1011,100 @@ export default function SocialMediaResults({
             </h3>
           </div>
           
-          <div className="p-6 space-y-6">
+          <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+            {/* Post Configuration Toggles */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Post Type Selection */}
+              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <h4 className="text-sm font-medium text-gray-900 mb-1">Post Type</h4>
+                    <p className="text-xs text-gray-600">
+                      {postPreferences.postType === 'single' 
+                        ? 'Single standalone post' 
+                        : `Connected sequence (${recommendedSequenceLength} posts recommended)`}
+                      {postPreferences.postType === 'sequence' && selectedIndexes.length > 0 && (
+                        <span className="block mt-1 text-xs text-blue-600">
+                          Based on {selectedIndexes.length} selected item{selectedIndexes.length === 1 ? '' : 's'}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-2 ml-4">
+                    <span className={`text-xs font-medium ${postPreferences.postType === 'single' ? 'text-green-600' : 'text-gray-500'}`}>
+                      Single
+                    </span>
+                    <button
+                      type="button"
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
+                        postPreferences.postType === 'sequence' ? 'bg-green-600' : 'bg-gray-200'
+                      }`}
+                      onClick={() => setPostPreferences(prev => ({ 
+                        ...prev, 
+                        postType: prev.postType === 'single' ? 'sequence' : 'single' 
+                      }))}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          postPreferences.postType === 'sequence' ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                    <span className={`text-xs font-medium ${postPreferences.postType === 'sequence' ? 'text-green-600' : 'text-gray-500'}`}>
+                      Sequence
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Author's Voice Toggle */}
+              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <h4 className="text-sm font-medium text-gray-900 mb-1">Author's Voice</h4>
+                    <p className="text-xs text-gray-600">
+                      {postPreferences.authorVoice 
+                        ? 'Mimic original author\'s style' 
+                        : 'Use selected tone settings'}
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-2 ml-4">
+                    <span className={`text-xs font-medium ${!postPreferences.authorVoice ? 'text-green-600' : 'text-gray-500'}`}>
+                      Off
+                    </span>
+                    <button
+                      type="button"
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
+                        postPreferences.authorVoice ? 'bg-green-600' : 'bg-gray-200'
+                      }`}
+                      onClick={() => setPostPreferences(prev => ({ 
+                        ...prev, 
+                        authorVoice: !prev.authorVoice 
+                      }))}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          postPreferences.authorVoice ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                    <span className={`text-xs font-medium ${postPreferences.authorVoice ? 'text-green-600' : 'text-gray-500'}`}>
+                      On
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Basic Settings */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {/* Platform Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Platform</label>
                 <select
                   value={postPreferences.platform}
                   onChange={(e) => setPostPreferences(prev => ({ ...prev, platform: e.target.value as Platform }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 >
                   <option value="linkedin">LinkedIn</option>
                   <option value="twitter">Twitter/X</option>
@@ -487,20 +1113,20 @@ export default function SocialMediaResults({
                 </select>
               </div>
 
-              {/* Tone Selection */}
+              {/* Target Audience */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Tone</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience</label>
                 <select
-                  value={postPreferences.tone}
-                  onChange={(e) => setPostPreferences(prev => ({ ...prev, tone: e.target.value as PostTone }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  value={postPreferences.targetAudience}
+                  onChange={(e) => handleBasicSettingChange('targetAudience', e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 >
-                  <option value="authors-voice">Author's Voice</option>
-                  <option value="professional">Professional</option>
-                  <option value="casual">Casual</option>
-                  <option value="inspirational">Inspirational</option>
-                  <option value="educational">Educational</option>
-                  <option value="humorous">Humorous</option>
+                  <option value="professionals">Professionals</option>
+                  <option value="general">General Audience</option>
+                  <option value="entrepreneurs">Entrepreneurs</option>
+                  <option value="students">Students</option>
+                  <option value="executives">Executives</option>
+                  <option value="creators">Creators</option>
                 </select>
               </div>
 
@@ -509,16 +1135,20 @@ export default function SocialMediaResults({
                 <label className="block text-sm font-medium text-gray-700 mb-2">Style</label>
                 <select
                   value={postPreferences.style}
-                  onChange={(e) => setPostPreferences(prev => ({ ...prev, style: e.target.value as PostStyle }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  onChange={(e) => {
+                    const selectedStyle = e.target.value;
+                    handleBasicSettingChange('style', selectedStyle);
+                  }}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 >
-                  <option value="storytelling">Storytelling</option>
-                  <option value="data-driven">Data-Driven</option>
-                  <option value="question-based">Question-Based</option>
-                  <option value="listicle">Listicle</option>
-                  <option value="personal-anecdote">Personal Anecdote</option>
+                  <option value="professional">Professional</option>
+                  <option value="engaging">Engaging</option>
                   <option value="educational">Educational</option>
-                  <option value="provocative">Provocative</option>
+                  <option value="authentic">Authentic</option>
+                  <option value="data-driven">Data-Driven</option>
+                  <option value="community-building">Community Building</option>
+                  <option value="thought-leadership">Thought Leadership</option>
+                  <option value="custom">Custom</option>
                 </select>
               </div>
             </div>
@@ -526,19 +1156,19 @@ export default function SocialMediaResults({
             {/* Language Selection */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Output Language</label>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                 {languageOptions.map((language) => (
                   <button
                     key={language.value}
                     onClick={() => setPostPreferences(prev => ({ ...prev, language: language.value as Language }))}
-                    className={`flex items-center justify-center px-3 py-2 rounded-md border transition-colors ${
+                    className={`flex items-center justify-center px-2 py-2 rounded-md border transition-colors text-sm ${
                       postPreferences.language === language.value
                         ? 'bg-green-100 border-green-300 text-green-800'
                         : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                     }`}
                   >
-                    <span className="mr-1">{language.flag}</span>
-                    <span className="text-xs font-medium truncate">{language.label.split(' ')[0]}</span>
+                    <span className="mr-1 text-base">{language.flag}</span>
+                    <span className="truncate text-xs font-medium">{language.label.split(' ')[0]}</span>
                   </button>
                 ))}
               </div>
@@ -563,34 +1193,38 @@ export default function SocialMediaResults({
               {/* Advanced Settings Panel */}
               {advancedOpen && (
                 <div className="mt-4 space-y-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Tone Selection */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Tone</label>
+                      <select
+                        value={postPreferences.tone}
+                        onChange={(e) => handleAdvancedSettingChange('tone', e.target.value)}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        disabled={postPreferences.authorVoice}
+                      >
+                        <option value="professional">Professional</option>
+                        <option value="casual">Casual</option>
+                        <option value="enthusiastic">Enthusiastic</option>
+                        <option value="thoughtful">Thoughtful</option>
+                        <option value="conversational">Conversational</option>
+                      </select>
+                      {postPreferences.authorVoice && (
+                        <p className="text-xs text-gray-500 mt-1">Disabled when Author's Voice is enabled</p>
+                      )}
+                    </div>
+
                     {/* Content Length */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Content Length</label>
                       <select
                         value={postPreferences.contentLength}
-                        onChange={(e) => setPostPreferences(prev => ({ ...prev, contentLength: e.target.value as any }))}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        onChange={(e) => handleAdvancedSettingChange('contentLength', e.target.value)}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                       >
                         <option value="short">Short</option>
                         <option value="medium">Medium</option>
                         <option value="long">Long</option>
-                      </select>
-                    </div>
-
-                    {/* Target Audience */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience</label>
-                      <select
-                        value={postPreferences.targetAudience}
-                        onChange={(e) => setPostPreferences(prev => ({ ...prev, targetAudience: e.target.value as any }))}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                      >
-                        <option value="professionals">Professionals</option>
-                        <option value="general">General Audience</option>
-                        <option value="entrepreneurs">Entrepreneurs</option>
-                        <option value="students">Students</option>
-                        <option value="experts">Industry Experts</option>
                       </select>
                     </div>
 
@@ -599,13 +1233,13 @@ export default function SocialMediaResults({
                       <label className="block text-sm font-medium text-gray-700 mb-2">Hashtags</label>
                       <select
                         value={postPreferences.hashtagPreference}
-                        onChange={(e) => setPostPreferences(prev => ({ ...prev, hashtagPreference: e.target.value as any }))}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        onChange={(e) => handleAdvancedSettingChange('hashtagPreference', e.target.value)}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                       >
                         <option value="none">No Hashtags</option>
                         <option value="minimal">Minimal (1-2)</option>
                         <option value="moderate">Moderate (3-5)</option>
-                        <option value="comprehensive">Extensive (6+)</option>
+                        <option value="comprehensive">Comprehensive (5-10)</option>
                       </select>
                     </div>
 
@@ -614,8 +1248,8 @@ export default function SocialMediaResults({
                       <label className="block text-sm font-medium text-gray-700 mb-2">Emoji Usage</label>
                       <select
                         value={postPreferences.emojiUsage}
-                        onChange={(e) => setPostPreferences(prev => ({ ...prev, emojiUsage: e.target.value as any }))}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        onChange={(e) => handleAdvancedSettingChange('emojiUsage', e.target.value)}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                       >
                         <option value="none">No Emojis</option>
                         <option value="minimal">Minimal</option>
@@ -625,23 +1259,66 @@ export default function SocialMediaResults({
                     </div>
                   </div>
 
-                  {/* Call to Action Type */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Call to Action</label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                      {['engagement', 'share', 'comment', 'mixed'].map((cta) => (
-                        <button
-                          key={cta}
-                          onClick={() => setPostPreferences(prev => ({ ...prev, ctaType: cta as any }))}
-                          className={`px-3 py-2 rounded-md border text-sm font-medium transition-colors ${
-                            postPreferences.ctaType === cta
-                              ? 'bg-green-100 border-green-300 text-green-800'
-                              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                          }`}
+                  {/* Advanced Style Customization */}
+                  <div className="border-t border-gray-300 pt-4 mt-4">
+                    <h4 className="text-sm font-medium text-gray-900 mb-3">Style Customization</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {/* Hook Style */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Hook Style</label>
+                        <select
+                          value={postPreferences.hookStyle}
+                          onChange={(e) => handleAdvancedSettingChange('hookStyle', e.target.value)}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
                         >
-                          {cta.charAt(0).toUpperCase() + cta.slice(1)}
-                        </button>
-                      ))}
+                          <option value="bold-statement">Bold Statement</option>
+                          <option value="question">Question</option>
+                          <option value="statistic">Statistic</option>
+                          <option value="story-opener">Story Opener</option>
+                          <option value="controversial">Controversial</option>
+                          <option value="curiosity-gap">Curiosity Gap</option>
+                          <option value="direct-address">Direct Address</option>
+                          <option value="problem-focused">Problem Focused</option>
+                        </select>
+                      </div>
+
+                      {/* Message Style */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Message Style</label>
+                        <select
+                          value={postPreferences.messageStyle}
+                          onChange={(e) => handleAdvancedSettingChange('messageStyle', e.target.value)}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                        >
+                          <option value="narrative">Narrative</option>
+                          <option value="bullet-points">Bullet Points</option>
+                          <option value="step-by-step">Step by Step</option>
+                          <option value="compare-contrast">Compare & Contrast</option>
+                          <option value="case-study">Case Study</option>
+                          <option value="personal-reflection">Personal Reflection</option>
+                          <option value="how-to">How To</option>
+                          <option value="myth-busting">Myth Busting</option>
+                        </select>
+                      </div>
+
+                      {/* CTA Style */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">CTA Style</label>
+                        <select
+                          value={postPreferences.ctaType}
+                          onChange={(e) => handleAdvancedSettingChange('ctaType', e.target.value)}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                        >
+                          <option value="direct-ask">Direct Ask</option>
+                          <option value="soft-invitation">Soft Invitation</option>
+                          <option value="challenge">Challenge</option>
+                          <option value="community-building">Community Building</option>
+                          <option value="value-proposition">Value Proposition</option>
+                          <option value="urgency">Urgency</option>
+                          <option value="curiosity-driven">Curiosity Driven</option>
+                          <option value="conversational">Conversational</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -678,6 +1355,76 @@ export default function SocialMediaResults({
         </div>
       </div>
     );
+  };
+
+  // Function to apply style preset based on Style + Target Audience matrix
+  const applyStylePreset = (style: string, audience: string = postPreferences.targetAudience) => {
+    if (style === 'custom') return;
+    
+    const presetKey = `${style}-${audience}` as keyof typeof stylePresets;
+    const preset = stylePresets[presetKey];
+    
+    if (preset) {
+      setPostPreferences(prev => ({
+        ...prev,
+        style: style as any,
+        ...preset,
+        // Preserve platform but use the passed audience parameter
+        platform: prev.platform,
+        targetAudience: audience as any
+      }));
+    }
+  };
+
+  // Function to detect if current settings match any preset in the matrix
+  const detectPresetMatch = (preferences: PostGenerationPreferences) => {
+    if (preferences.style === 'custom') return 'custom';
+    
+    const presetKey = `${preferences.style}-${preferences.targetAudience}` as keyof typeof stylePresets;
+    const preset = stylePresets[presetKey];
+    
+    if (!preset) return 'custom';
+    
+    // When author's voice is enabled, ignore tone matching since it overrides the preset tone
+    const keysToCheck = preferences.authorVoice 
+      ? Object.entries(preset).filter(([key]) => key !== 'tone')
+      : Object.entries(preset);
+      
+    const matches = keysToCheck.every(([key, value]) => 
+      preferences[key as keyof PostGenerationPreferences] === value
+    );
+    
+    return matches ? preferences.style : 'custom';
+  };
+
+  // Function to handle manual setting changes that might affect style detection
+  const handleAdvancedSettingChange = (key: string, value: any) => {
+    const newPreferences = { ...postPreferences, [key]: value };
+    const detectedStyle = detectPresetMatch(newPreferences);
+    
+    setPostPreferences({
+      ...newPreferences,
+      style: detectedStyle as any
+    });
+  };
+
+  // Function to handle basic setting changes that might affect style detection
+  const handleBasicSettingChange = (key: string, value: any) => {
+    const newPreferences = { ...postPreferences, [key]: value };
+    
+    // If changing style or target audience, apply the appropriate preset
+    if (key === 'style') {
+      applyStylePreset(value, newPreferences.targetAudience);
+    } else if (key === 'targetAudience') {
+      // Re-apply current style with new audience
+      applyStylePreset(newPreferences.style, value);
+    } else {
+      const detectedStyle = detectPresetMatch(newPreferences);
+      setPostPreferences({
+        ...newPreferences,
+        style: detectedStyle as any
+      });
+    }
   };
 
   return (

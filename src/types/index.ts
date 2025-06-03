@@ -63,6 +63,10 @@ export interface PostGenerationPreferences {
   emojiUsage: EmojiUsage;
   ctaType: CTAType;
   targetAudience: TargetAudience;
+  hookStyle: HookStyle;
+  messageStyle: MessageStyle;
+  authorVoice: boolean;
+  sequenceLength?: number;
 }
 
 export interface PostGenerationRequest {
@@ -125,15 +129,17 @@ export interface HistoryState {
 
 export type Platform = 'linkedin' | 'twitter' | 'facebook' | 'instagram';
 export type PostType = 'single' | 'sequence';
-export type PostTone = 'professional' | 'casual' | 'enthusiastic' | 'thoughtful' | 'conversational' | 'authors-voice';
-export type PostStyle = 'storytelling' | 'data-driven' | 'question-based' | 'listicle' | 'personal-anecdote' | 'educational' | 'provocative';
+export type PostTone = 'professional' | 'casual' | 'enthusiastic' | 'thoughtful' | 'conversational';
+export type PostStyle = 'professional' | 'engaging' | 'educational' | 'authentic' | 'data-driven' | 'community-building' | 'thought-leadership' | 'custom';
 export type Language = 'english' | 'spanish' | 'chinese' | 'arabic' | 'portuguese' | 'indonesian' | 'french' | 'japanese' | 'russian' | 'german';
 export type ContentLength = 'short' | 'medium' | 'long';
 export type HashtagPreference = 'none' | 'minimal' | 'moderate' | 'comprehensive';
 export type EmojiUsage = 'none' | 'minimal' | 'moderate' | 'heavy';
-export type CTAType = 'question' | 'action' | 'share' | 'comment' | 'poll' | 'mixed';
+export type CTAType = 'direct-ask' | 'soft-invitation' | 'challenge' | 'community-building' | 'value-proposition' | 'urgency' | 'curiosity-driven' | 'conversational';
 export type TargetAudience = 'general' | 'professionals' | 'entrepreneurs' | 'students' | 'executives' | 'creators';
 export type ContentType = 'hooks' | 'quotes' | 'key-insights' | 'statistics' | 'questions' | 'takeaways';
+export type HookStyle = 'bold-statement' | 'question' | 'statistic' | 'story-opener' | 'controversial' | 'curiosity-gap' | 'direct-address' | 'problem-focused';
+export type MessageStyle = 'narrative' | 'bullet-points' | 'step-by-step' | 'compare-contrast' | 'case-study' | 'personal-reflection' | 'how-to' | 'myth-busting';
 
 export interface SocialMediaResultsProps {
   context: {
