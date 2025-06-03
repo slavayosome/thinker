@@ -1,9 +1,7 @@
 // src/app/page.tsx
 'use client';
 
-import { useState } from 'react';
-import UrlInput from '@/components/UrlInput';
-import ProgressStatus from '@/components/ProgressStatus';
+import { useState, useEffect } from 'react';
 import SocialMediaResults from '@/components/SocialMediaResults';
 import History from '@/components/History';
 import { ArticleData, AnalysisResult, ContentResult, ContentType, HistoryItem, Language, SocialPostsResult, PostGenerationPreferences } from '@/types';
@@ -112,7 +110,7 @@ export default function Home() {
         throw new Error('Invalid article data received');
       }
 
-      // Article fetched successfully, now show content type selection
+      // Article fetched successfully, now analyze it directly
       const articleData = {
         title: parseData.title,
         content: parseData.content,
@@ -123,45 +121,8 @@ export default function Home() {
       
       setArticle(articleData);
       
-      // Detect available content types
-      setIsDetectingTypes(true);
-      try {
-        const detectResponse = await fetch('/api/detect-content-types', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ article: articleData }),
-        });
-
-        if (detectResponse.ok) {
-          const detectData = await detectResponse.json();
-          if (detectData.success && detectData.result) {
-            setAvailableContentTypes(detectData.result.availableTypes);
-            setRecommendedTypes(detectData.result.recommendedTypes);
-            
-            // Set default selection to first recommended type
-            if (detectData.result.recommendedTypes.length > 0) {
-              setSelectedContentType(detectData.result.recommendedTypes[0]);
-            }
-          }
-        }
-      } catch (detectError) {
-        console.error('Content type detection failed:', detectError);
-        // Use all types as fallback
-        setAvailableContentTypes(
-          contentTypeOptions.map(opt => ({
-            type: opt.value,
-            available: true,
-            confidence: 70,
-            reason: 'Detection unavailable'
-          }))
-        );
-      } finally {
-        setIsDetectingTypes(false);
-      }
-      
-      setCurrentStep('contentType');
+      // Proceed directly to analysis
+      handleAnalyzeArticle(articleData);
       
       console.log('✅ Article fetched successfully');
       
@@ -176,11 +137,9 @@ export default function Home() {
     }
   }
 
-  // Generate content after content type selection
-  async function handleGenerateContent() {
-    if (!article) return;
-    
-    console.log('🚀 Generating content for:', selectedContentType);
+  // New function to analyze article and extract key messages
+  async function handleAnalyzeArticle(articleData: any) {
+    console.log('🚀 Analyzing article:', articleData.title);
     
     // Clear historical data since we're generating fresh content
     setHistoricalPosts(null);
@@ -220,7 +179,7 @@ export default function Home() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ article }),
+          body: JSON.stringify({ article: articleData }),
         });
 
         if (langResponse.ok) {
@@ -233,63 +192,41 @@ export default function Home() {
         console.error('Language detection failed:', langError);
       }
       
-      // Generate content
-      setCurrentStep('generating');
+      // Create content result from key messages for backward compatibility
+      const contentResult = {
+        type: 'key-insights' as ContentType,
+        items: analysisData.analysis.keyMessages.map((message: string, index: number) => ({
+          id: `key_message_${index}`,
+          type: 'key-insights' as ContentType,
+          content: message,
+          selected: false
+        }))
+      };
       
-      const contentResponse = await fetch('/api/generate-content', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          article,
-          analysis: analysisData.analysis,
-          contentType: selectedContentType,
-          count: 8,
-          language: detectedLanguage
-        }),
-      });
-
-      if (!contentResponse.ok) {
-        const errorData = await contentResponse.json();
-        throw new Error(errorData.error || 'Content generation failed');
-      }
-
-      const contentData = await contentResponse.json();
+      setGeneratedContent(contentResult);
       
-      if (!contentData.success) {
-        throw new Error(contentData.error || 'Content generation failed');
-      }
-
-      setGeneratedContent(contentData.result);
-
       // Save to history
       const historyId = historyManager.saveContentGeneration(
-        url,
-        article.title,
-        contentData.result,
+        articleData.url,
+        articleData.title,
+        contentResult,
         detectedLanguage,
         analysisData.analysis
       );
+      
       setCurrentHistoryId(historyId);
+      setCurrentHistoryTitle(articleData.title);
       setIsLatestItem(true);
-      
-      // Get the history item to set the title
-      const historyItem = historyManager.getHistoryItem(historyId);
-      if (historyItem) {
-        setCurrentHistoryTitle(historyItem.title);
-      }
-
-      console.log('✅ Content generation completed');
-      
-      // Complete
       setCurrentStep('complete');
       
+      console.log('✅ Analysis completed successfully');
+      
     } catch (err) {
-      console.error('❌ Content generation failed:', err instanceof Error ? err.message : 'Unknown error');
+      console.error('❌ Analysis failed:', err instanceof Error ? err.message : 'Unknown error');
       
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-      setError(`Error generating content: ${errorMessage}`);
+      setError(`Error analyzing article: ${errorMessage}`);
+      setCurrentStep('urlInput');
     } finally {
       setLoading(false);
     }
@@ -309,10 +246,13 @@ export default function Home() {
     console.log('🆕 Switched to new history item:', newHistoryId);
   };
 
-  // Legacy submit handler (keeping for backwards compatibility)
-  async function handleSubmit(submittedUrl: string) {
-    await handleFetchArticle(submittedUrl);
-  }
+  // Form submission handler
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (editingUrl.trim()) {
+      handleFetchArticle(editingUrl.trim());
+    }
+  };
 
   const handleLoadHistoryItem = (item: HistoryItem) => {
     setUrl(item.articleUrl);
@@ -465,17 +405,17 @@ export default function Home() {
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                   {/* Status Indicator - Always visible */}
                   <div className="flex items-center justify-between sm:justify-start">
-                    <div className="flex items-center">
-                      {!isLatestItem ? (
+                  <div className="flex items-center">
+                    {!isLatestItem ? (
                         <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 rounded-full border border-amber-200">
                           <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
                           <span className="text-xs font-medium text-amber-800">Previous</span>
-                        </div>
-                      ) : (
+                      </div>
+                    ) : (
                         <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 rounded-full border border-emerald-200">
                           <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-                          <span className="text-xs font-medium text-emerald-800">Latest</span>
-                        </div>
+                        <span className="text-xs font-medium text-emerald-800">Latest</span>
+                      </div>
                       )}
                     </div>
 
@@ -551,7 +491,7 @@ export default function Home() {
                 </div>
 
                 {/* Right Section - Desktop only Latest button */}
-                {!isLatestItem && (
+                  {!isLatestItem && (
                   <div className="hidden sm:flex items-center gap-2">
                     <button
                       onClick={handleLoadLatest}
@@ -563,7 +503,7 @@ export default function Home() {
                       <span className="hidden sm:inline">Latest</span>
                     </button>
                   </div>
-                )}
+                  )}
               </div>
             </div>
           </div>
@@ -581,159 +521,73 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Content Type Selection */}
-        {currentStep === 'contentType' && article && (
-          <div className="bg-white rounded-xl shadow-lg p-6 mb-6 animate-fadeInUp">
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                Article fetched successfully!
-              </h3>
-              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-sm text-green-800 font-medium">📄 {article.title}</p>
-                <p className="text-xs text-green-700 mt-1">From: {article.url}</p>
-              </div>
-            </div>
-
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">
-              What would you like to extract from this article?
-            </h3>
-            
-            {isDetectingTypes ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                  <p className="text-sm text-gray-600">Analyzing article content...</p>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-                {contentTypeOptions.map((option) => {
-                  const availability = availableContentTypes.find(a => a.type === option.value);
-                  const isAvailable = availability?.available !== false;
-                  const isRecommended = recommendedTypes.includes(option.value);
-                  const confidence = availability?.confidence || 0;
-                  
-                  return (
-                    <button
-                      key={option.value}
-                      onClick={() => isAvailable && setSelectedContentType(option.value)}
-                      disabled={!isAvailable}
-                      className={`p-3 rounded-lg border-2 transition-all duration-200 text-left relative ${
-                        !isAvailable 
-                          ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed' 
-                          : selectedContentType === option.value
-                          ? 'border-blue-500 bg-blue-50 shadow-md'
-                          : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                      }`}
-                    >
-                      {isRecommended && (
-                        <span className="absolute -top-1 -right-1 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
-                          Recommended
-                        </span>
-                      )}
-                      <div className="flex items-center mb-1">
-                        <span className="text-lg mr-2">{option.icon}</span>
-                        <h4 className={`font-medium text-sm ${
-                          !isAvailable 
-                            ? 'text-gray-500'
-                            : selectedContentType === option.value 
-                            ? 'text-blue-900' 
-                            : 'text-gray-900'
-                        }`}>
-                          {option.label}
-                        </h4>
-                      </div>
-                      <p className={`text-xs ${
-                        !isAvailable 
-                          ? 'text-gray-400'
-                          : selectedContentType === option.value 
-                          ? 'text-blue-700' 
-                          : 'text-gray-600'
-                      }`}>
-                        {option.description}
-                      </p>
-                      {availability && (
-                        <div className="mt-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs text-gray-500">Confidence</span>
-                            <span className="text-xs font-medium text-gray-700">{confidence}%</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-1.5">
-                            <div 
-                              className={`h-1.5 rounded-full ${
-                                confidence >= 80 ? 'bg-green-500' : 
-                                confidence >= 60 ? 'bg-yellow-500' : 
-                                'bg-red-500'
-                              }`}
-                              style={{ width: `${confidence}%` }}
-                            />
-                          </div>
-                          {availability.reason && (
-                            <p className="text-xs text-gray-500 mt-1">{availability.reason}</p>
-                          )}
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className="flex justify-between items-center">
-              <button
-                onClick={handleStartNew}
-                className="text-sm text-gray-600 hover:text-gray-800"
-              >
-                ← Use different URL
-              </button>
-              <button
-                onClick={handleGenerateContent}
-                disabled={loading || isDetectingTypes}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Generate {contentTypeOptions.find(opt => opt.value === selectedContentType)?.label} →
-              </button>
-            </div>
-          </div>
-        )}
-        
-        {/* Input Section */}
-        {currentStep === 'urlInput' && (
-          <div className="bg-white rounded-xl shadow-lg p-6 mb-6 animate-fadeInUp hover:shadow-xl transition-shadow duration-300">
-            <UrlInput onSubmit={handleFetchArticle} isProcessing={loading} />
-          </div>
-        )}
-
-        {/* Progress Status */}
+        {/* Loading States */}
         {loading && (
-          <div className="animate-slideIn">
-            <ProgressStatus 
-              currentStep={currentStep === 'fetching' ? 1 : currentStep === 'analysis' ? 2 : currentStep === 'generating' ? 3 : 4}
-              totalSteps={4}
-              steps={[
-                { id: '1', name: 'Fetching Article', description: 'Retrieving article content' },
-                { id: '2', name: 'Analysis', description: 'Analyzing content and themes' },
-                { id: '3', name: 'Generating Content', description: `Creating ${selectedContentType}` },
-                { id: '4', name: 'Complete', description: 'Ready for post generation' }
-              ]}
-            />
+          <div className="flex flex-col items-center py-8">
+            <div className="relative w-16 h-16 mb-4">
+              <div className="absolute inset-0 border-4 border-blue-200 rounded-full"></div>
+              <div className="absolute inset-0 border-4 border-transparent border-t-blue-600 rounded-full animate-spin"></div>
+            </div>
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                {currentStep === 'fetching' && 'Fetching Article...'}
+                {currentStep === 'analysis' && 'Analyzing Content...'}
+                {currentStep === 'generating' && 'Generating Content...'}
+              </h3>
+              <p className="text-gray-600">
+                {currentStep === 'fetching' && 'Reading and parsing the article content'}
+                {currentStep === 'analysis' && 'Extracting key insights and themes'}
+                {currentStep === 'generating' && 'Creating content based on your preferences'}
+              </p>
+            </div>
           </div>
         )}
 
         {/* Error Display */}
         {error && (
-          <div className="mt-6 bg-red-50 border border-red-200 rounded-lg p-4 animate-slideIn">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex items-center">
-              <div className="text-red-800">
-                <svg className="w-5 h-5 mr-2 inline" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                {error}
+              <svg className="w-5 h-5 text-red-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 0016 0zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+              <span className="text-red-800">{error}</span>
+            </div>
+          </div>
+        )}
+
+        {/* URL Input Step */}
+        {currentStep === 'urlInput' && (
+          <div className="bg-white rounded-xl shadow-lg p-6 animate-fadeInUp">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">Enter Article URL</h2>
+            <p className="text-gray-600 mb-6">
+              Paste the URL of any article you'd like to analyze and create content from.
+            </p>
+            
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="url" className="block text-sm font-medium text-gray-700 mb-2">
+                  Article URL
+                </label>
+                <input
+                  type="url"
+                  id="url"
+                  value={editingUrl}
+                  onChange={(e) => setEditingUrl(e.target.value)}
+                  placeholder="https://example.com/article"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500"
+                  required
+                  disabled={loading}
+                />
               </div>
-            </div>
-            <div className="mt-2 text-xs text-red-600">
-              💡 Tip: Check the browser console (F12) for detailed error logs
-            </div>
+              
+              <button
+                type="submit"
+                disabled={loading || !editingUrl.trim()}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-6 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                {loading ? 'Processing...' : 'Analyze Article →'}
+              </button>
+            </form>
           </div>
         )}
 
