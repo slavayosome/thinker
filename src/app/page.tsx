@@ -848,7 +848,7 @@ export default function Home() {
                           )}
                         </button>
                         <p className="text-xs text-gray-400 text-center mt-2">
-                          Get a random article from Hacker News to test with
+                          Get a random article from MIT Technology Review to test with
                         </p>
                       </div>
                     </form>

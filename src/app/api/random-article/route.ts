@@ -2,68 +2,58 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    // Fetch top stories from Hacker News
-    const topStoriesResponse = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
-    
-    if (!topStoriesResponse.ok) {
-      throw new Error('Failed to fetch top stories');
-    }
-    
-    const topStoryIds = await topStoriesResponse.json();
-    
-    // Take first 30 stories to avoid too many requests
-    const storyIds = topStoryIds.slice(0, 30);
-    
-    // Fetch details for multiple stories
-    const storyPromises = storyIds.map(async (id: number) => {
-      try {
-        const response = await fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`);
-        if (response.ok) {
-          return await response.json();
-        }
-        return null;
-      } catch {
-        return null;
+    // Use RSS2JSON service to fetch MIT Technology Review feed
+    const response = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https://www.technologyreview.com/feed/', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; ThinkerBot/1.0)'
       }
     });
     
-    const stories = await Promise.all(storyPromises);
+    if (!response.ok) {
+      throw new Error('Failed to fetch MIT Tech Review feed via RSS2JSON');
+    }
     
-    // Filter for stories with URLs (not Ask HN, Show HN text posts, etc.)
-    const articlesWithUrls = stories.filter(story => 
-      story && 
-      story.url && 
-      story.title &&
-      !story.url.includes('news.ycombinator.com') && // Exclude HN internal links
-      (story.url.includes('http://') || story.url.includes('https://')) &&
-      story.title.length > 10 // Ensure decent title length
+    const data = await response.json();
+    
+    if (!data.items || data.items.length === 0) {
+      throw new Error('No articles found in MIT Tech Review feed');
+    }
+    
+    // Filter for quality articles
+    const articles = data.items.filter((item: any) => 
+      item.title && 
+      item.link && 
+      item.title.length > 15 &&
+      item.link.includes('technologyreview.com') &&
+      !item.title.toLowerCase().includes('podcast') &&
+      !item.title.toLowerCase().includes('newsletter')
     );
     
-    if (articlesWithUrls.length === 0) {
+    if (articles.length === 0) {
       return NextResponse.json(
-        { error: 'No suitable articles found' },
+        { error: 'No suitable articles found in MIT Tech Review feed' },
         { status: 404 }
       );
     }
     
     // Pick a random article
-    const randomIndex = Math.floor(Math.random() * articlesWithUrls.length);
-    const selectedArticle = articlesWithUrls[randomIndex];
+    const randomIndex = Math.floor(Math.random() * articles.length);
+    const selectedArticle = articles[randomIndex];
     
     return NextResponse.json({
       success: true,
       article: {
         title: selectedArticle.title,
-        url: selectedArticle.url,
-        score: selectedArticle.score,
-        source: 'Hacker News'
+        url: selectedArticle.link,
+        description: selectedArticle.description || '',
+        source: 'MIT Technology Review'
       }
     });
     
   } catch (error) {
-    console.error('Error fetching random article:', error);
+    console.error('Error fetching random MIT Tech Review article:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch random article' },
+      { error: 'Failed to fetch random article from MIT Technology Review' },
       { status: 500 }
     );
   }
