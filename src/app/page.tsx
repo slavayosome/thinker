@@ -156,7 +156,7 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url: articleData.url }),
       });
 
       if (!analysisResponse.ok) {
