@@ -181,7 +181,7 @@ export default function History({ isOpen, onClose, onLoadItem, currentHistoryId 
                   }`}
                   onClick={() => handleLoadItem(item)}
                 >
-                  {/* Title */}
+                  {/* Main Content */}
                   <div className="flex items-start justify-between mb-2">
                     {editingId === item.id ? (
                       <div className="flex-1 mr-2">
@@ -200,22 +200,20 @@ export default function History({ isOpen, onClose, onLoadItem, currentHistoryId 
                         />
                       </div>
                     ) : (
-                      <div className="flex items-center flex-1">
-                        <span className="text-lg mr-2">
-                          {contentTypeIcons[item.contentType]}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-medium text-gray-900 text-sm truncate flex items-center gap-2">
-                            {item.title}
-                            {currentHistoryId === item.id && (
-                              <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">
-                                Current
-                              </span>
-                            )}
-                          </h3>
-                          <p className="text-xs text-gray-500 truncate">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-medium text-gray-900 text-sm truncate">
                             {item.articleTitle}
-                          </p>
+                          </h3>
+                          {currentHistoryId === item.id && (
+                            <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full flex-shrink-0">
+                              Current
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-gray-400">
+                          <span className="truncate mr-2">{new URL(item.articleUrl).hostname}</span>
+                          <span className="flex-shrink-0">{formatDate(item.createdAt)}</span>
                         </div>
                       </div>
                     )}
@@ -244,47 +242,15 @@ export default function History({ isOpen, onClose, onLoadItem, currentHistoryId 
                     )}
                   </div>
 
-                  {/* Article URL */}
-                  <div className="text-xs text-gray-500 mb-2 truncate">
-                    <span className="font-medium">URL:</span> {item.articleUrl}
-                  </div>
-
-                  {/* Metadata */}
-                  <div className="flex items-center justify-between text-xs text-gray-500">
-                    <div className="flex items-center gap-2">
-                      <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs">
-                        {contentTypeLabels[item.contentType]}
-                      </span>
-                      <span>
-                        {item.generatedContent.items.length} items
-                      </span>
-                    </div>
-                    <span title={format(new Date(item.createdAt), 'PPpp')}>
-                      {formatDate(item.createdAt)}
-                    </span>
-                  </div>
-
-                  {/* Analysis preview if available */}
-                  {item.articleAnalysis && (
-                    <div className="mt-2 p-2 bg-blue-50 rounded text-xs text-blue-700">
-                      <span className="font-medium">Theme:</span> {item.articleAnalysis.centralTheme.slice(0, 50)}...
-                    </div>
-                  )}
-
-                  {/* Posts indicator */}
+                  {/* Posts Status - Only if posts exist */}
                   {item.generatedPosts && (
-                    <div className="mt-2 flex items-center justify-between text-xs">
-                      <div className="flex items-center text-green-600">
-                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
+                    <div className="flex items-center gap-1 text-xs">
+                      <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      <span className="text-green-700 font-medium">
                         {item.generatedPosts.posts.length} post{item.generatedPosts.posts.length !== 1 ? 's' : ''} generated
-                      </div>
-                      {item.selectedContentIndexes && (
-                        <span className="text-gray-500">
-                          from {item.selectedContentIndexes.length} selected item{item.selectedContentIndexes.length !== 1 ? 's' : ''}
-                        </span>
-                      )}
+                      </span>
                     </div>
                   )}
                 </div>

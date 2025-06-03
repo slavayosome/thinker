@@ -854,6 +854,12 @@ export default function SocialMediaResults({
 
       setGeneratedPosts(data.posts);
       
+      // Create updated preferences with sequence length for saving
+      const updatedPreferences = {
+        ...postPreferences,
+        sequenceLength: postPreferences.postType === 'sequence' ? recommendedSequenceLength : undefined
+      };
+      
       if (!isLatestItem && context.generatedContent && data.posts) {
         const newHistoryId = historyManager.saveContentGeneration(
           context.article,
@@ -865,7 +871,7 @@ export default function SocialMediaResults({
         historyManager.savePostGeneration(
           newHistoryId,
           data.posts,
-          postPreferences,
+          updatedPreferences,
           selectedIndexes
         );
         
@@ -878,7 +884,7 @@ export default function SocialMediaResults({
         historyManager.savePostGeneration(
           currentHistoryId,
           data.posts,
-          postPreferences,
+          updatedPreferences,
           selectedIndexes
         );
       }

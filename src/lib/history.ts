@@ -118,6 +118,14 @@ export class HistoryManager {
       history.items[itemIndex].generatedPosts = posts;
       history.items[itemIndex].preferences = preferences;
       history.items[itemIndex].selectedContentIndexes = selectedIndexes;
+      
+      // Update the language if posts were generated in a different language
+      if (preferences.language !== history.items[itemIndex].language) {
+        const oldLanguage = history.items[itemIndex].language;
+        history.items[itemIndex].language = preferences.language;
+        console.log(`🌍 Updated language from ${oldLanguage} to ${preferences.language}`);
+      }
+      
       history.currentItem = history.items[itemIndex];
       
       this.saveHistory(history);
