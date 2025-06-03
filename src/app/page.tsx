@@ -86,27 +86,16 @@ export default function Home() {
   // Clear error helper
   const clearError = () => setError(null);
 
-  // New function to fetch article only
+  // Helper function to handle fetch errors from both /api/parse and /api/analyze
   async function handleFetchArticle(submittedUrl: string) {
-    console.log('🚀 Fetching article from:', submittedUrl);
-    console.log('🔍 URL length:', submittedUrl.length);
-    console.log('🔍 URL starts with:', submittedUrl.substring(0, 20));
+    console.log('🚀 Fetching article:', submittedUrl);
     
     try {
-      setLoading(true);
       clearError();
+      setLoading(true);
+      setCurrentStep('fetching');
       setUrl(submittedUrl);
       setEditingUrl(submittedUrl);
-      setCurrentStep('fetching');
-      
-      // Validate URL format
-      try {
-        new URL(submittedUrl);
-      } catch {
-        throw createError('validation', 'Please enter a valid URL', 'Invalid URL format', false);
-      }
-      
-      console.log('🌐 Sending URL to API:', submittedUrl);
       
       // Parse the article to validate it exists
       const parseResponse = await fetch('/api/parse', {
@@ -120,14 +109,44 @@ export default function Home() {
       console.log('📡 Parse response status:', parseResponse.status);
 
       if (!parseResponse.ok) {
-        const fetchError = await handleFetchError(parseResponse, 'article parsing');
-        throw fetchError;
+        // Handle the new structured error responses
+        if (parseResponse.status === 422) {
+          const errorData = await parseResponse.json();
+          
+          // Create enhanced error with structured information
+          const enhancedError = createError(
+            'parsing',
+            errorData.error || 'Failed to parse article',
+            errorData.errorType === 'paywall' 
+              ? 'This article appears to be behind a paywall or requires a subscription'
+              : 'Content extraction failed',
+            false // Not retryable for structured parsing issues
+          );
+          
+          // Add structured error metadata
+          enhancedError.errorType = errorData.errorType;
+          enhancedError.suggestions = errorData.suggestions || [];
+          enhancedError.metadata = errorData.metadata;
+          
+          throw enhancedError;
+        } else {
+          const fetchError = await handleFetchError(parseResponse, 'article parsing');
+          throw fetchError;
+        }
       }
 
       const parseData = await parseResponse.json();
       
       console.log('📋 Parse response data URL:', parseData.url);
       console.log('📋 Parse response data title:', parseData.title);
+      
+      // Check for hybrid parsing metadata and log it
+      if (parseData._hybrid) {
+        console.log(`📊 Parsing method: ${parseData._hybrid.parsingMethod} (${parseData._hybrid.extractionTime}ms, confidence: ${parseData._hybrid.confidence}%)`);
+        if (parseData._hybrid.extractionMethods?.length > 0) {
+          console.log(`🔍 Extraction methods: ${parseData._hybrid.extractionMethods.join(', ')}`);
+        }
+      }
       
       // The parse API returns the article directly, not wrapped in a success field
       if (parseData.error) {

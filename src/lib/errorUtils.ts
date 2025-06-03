@@ -8,6 +8,15 @@ export interface AppError {
   retryable: boolean;
   timestamp: number;
   suggestions?: string[];
+  // New properties for enhanced error handling
+  errorType?: 'paywall' | 'no-content' | 'parsing-failed' | 'network' | 'unknown';
+  metadata?: {
+    title?: string;
+    author?: string;
+    date_published?: string;
+    domain?: string;
+    publisher?: string;
+  };
 }
 
 export const createError = (

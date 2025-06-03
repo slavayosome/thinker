@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { decode } from 'html-entities';
 import Parser from '@postlight/parser';
+import { parseArticleHybrid, getPlatformRecommendations, getContentAccessibilityStatus } from '@/lib/hybridParser';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     let url = searchParams.get('url');
+    const useHybrid = searchParams.get('hybrid') !== 'false'; // Default to true
 
     if (!url) {
       return NextResponse.json({ 
@@ -13,7 +15,11 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
-    return await parseUrl(url);
+    if (useHybrid) {
+      return await parseUrlHybrid(url);
+    } else {
+      return await parseUrlTraditional(url);
+    }
   } catch (error) {
     console.error('❌ Parse GET endpoint error:', error);
     return NextResponse.json({ 
@@ -24,7 +30,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { url } = await request.json();
+    const { url, hybrid = true } = await request.json();
 
     if (!url) {
       return NextResponse.json({ 
@@ -32,7 +38,11 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    return await parseUrl(url);
+    if (hybrid) {
+      return await parseUrlHybrid(url);
+    } else {
+      return await parseUrlTraditional(url);
+    }
   } catch (error) {
     console.error('❌ Parse POST endpoint error:', error);
     return NextResponse.json({ 
@@ -41,8 +51,76 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function parseUrl(url: string) {
-  console.log('🔍 Parsing URL:', url);
+async function parseUrlHybrid(url: string) {
+  console.log('🧪 Using hybrid parsing for:', url);
+  
+  try {
+    const result = await parseArticleHybrid(url);
+    const recommendations = getPlatformRecommendations(url);
+    const accessibilityStatus = getContentAccessibilityStatus(result);
+    
+    console.log(`✅ Hybrid parsing completed: ${result.parsingMethod} (${result.extractionTime}ms)`);
+    
+    // Check if content is accessible
+    if (!accessibilityStatus.isAccessible) {
+      console.log(`⚠️ Content accessibility issue: ${accessibilityStatus.reason}`);
+      
+      // Return detailed error information
+      return NextResponse.json({
+        error: accessibilityStatus.reason,
+        errorType: accessibilityStatus.errorType,
+        suggestions: accessibilityStatus.suggestions,
+        metadata: {
+          title: result.title,
+          author: result.author,
+          date_published: result.date_published,
+          domain: result.domain,
+          publisher: result.metadata.publisher
+        },
+        _hybrid: {
+          parsingMethod: result.parsingMethod,
+          structuredDataScore: result.structuredDataScore,
+          extractionTime: result.extractionTime,
+          hasFullContent: result.hasFullContent,
+          confidence: result.confidence,
+          extractionMethods: result.extractionMethods,
+          recommendations
+        }
+      }, { status: 422 });
+    }
+    
+    // Return data in the same format as traditional parsing for compatibility
+    return NextResponse.json({
+      title: result.title,
+      content: result.content,
+      url: result.url || url,
+      author: result.author,
+      date_published: result.date_published,
+      excerpt: result.excerpt,
+      lead_image_url: result.lead_image_url,
+      word_count: result.word_count,
+      domain: result.domain,
+      // Additional hybrid parsing metadata
+      _hybrid: {
+        parsingMethod: result.parsingMethod,
+        structuredDataScore: result.structuredDataScore,
+        extractionTime: result.extractionTime,
+        hasFullContent: result.hasFullContent,
+        confidence: result.confidence,
+        extractionMethods: result.extractionMethods,
+        metadata: result.metadata,
+        recommendations,
+        accessibility: accessibilityStatus
+      }
+    });
+  } catch (error) {
+    console.error('❌ Hybrid parsing failed, falling back to traditional:', error);
+    return await parseUrlTraditional(url);
+  }
+}
+
+async function parseUrlTraditional(url: string) {
+  console.log('🔍 Using traditional parsing for:', url);
 
   // Decode the URL first if it's already encoded to get the raw URL
   let cleanUrl = url;
@@ -91,7 +169,17 @@ async function parseUrl(url: string) {
       excerpt: result.excerpt,
       lead_image_url: result.lead_image_url,
       word_count: result.word_count,
-      domain: result.domain
+      domain: result.domain,
+      _hybrid: {
+        parsingMethod: 'traditional-only',
+        structuredDataScore: 0,
+        extractionTime: 0,
+        hasFullContent: !!(result.content),
+        confidence: 85, // Traditional parsing baseline confidence
+        extractionMethods: ['Mercury Parser'],
+        metadata: {},
+        recommendations: getPlatformRecommendations(url)
+      }
     });
     
   } catch (error) {
@@ -134,7 +222,17 @@ async function parseUrl(url: string) {
           excerpt: result.excerpt,
           lead_image_url: result.lead_image_url,
           word_count: result.word_count,
-          domain: result.domain
+          domain: result.domain,
+          _hybrid: {
+            parsingMethod: 'traditional-retry',
+            structuredDataScore: 0,
+            extractionTime: 0,
+            hasFullContent: !!(result.content),
+            confidence: 80, // Slightly lower confidence for retry
+            extractionMethods: ['Mercury Parser (retry)'],
+            metadata: {},
+            recommendations: getPlatformRecommendations(url)
+          }
         });
       } catch (retryError) {
         console.error('❌ Parser retry failed:', retryError);

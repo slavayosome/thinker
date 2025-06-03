@@ -7,12 +7,16 @@ export async function fetchArticle(url: string) {
         : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
       
       // Use POST endpoint to avoid URL encoding issues with Cyrillic characters
+      // Now uses hybrid parsing by default
       const response = await fetch(`${baseUrl}/api/parse`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ 
+          url,
+          hybrid: true // Enable hybrid parsing by default
+        })
       });
     
       if (!response.ok) {
@@ -25,6 +29,14 @@ export async function fetchArticle(url: string) {
       // Validate that we got article content
       if (!data.content) {
         throw new Error("No content found in the article");
+      }
+      
+      // Log hybrid parsing metadata if available
+      if (data._hybrid) {
+        console.log(`📊 Parsing method: ${data._hybrid.parsingMethod} (${data._hybrid.extractionTime}ms, confidence: ${data._hybrid.confidence}%)`);
+        if (data._hybrid.extractionMethods?.length > 0) {
+          console.log(`🔍 Extraction methods: ${data._hybrid.extractionMethods.join(', ')}`);
+        }
       }
       
       return data;
