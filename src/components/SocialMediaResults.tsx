@@ -1453,7 +1453,7 @@ export default function SocialMediaResults({
       {/* Content Selection Section */}
       {(context.hooks || context.generatedContent) && (
         <CollapsibleSection
-          title={context.hooks ? "Generated Hooks" : "Generated Content"}
+          title="Key Messages"
           icon={<svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clipRule="evenodd" />
             <path fillRule="evenodd" d="M4 5a2 2 0 012-2v1a1 1 0 001 1h6a1 1 0 001-1V3a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zM8 8a1 1 0 000 2h4a1 1 0 100-2H8z" clipRule="evenodd" />
