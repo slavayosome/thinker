@@ -83,6 +83,12 @@ export default function Home() {
   const [historicalPreferences, setHistoricalPreferences] = useState<PostGenerationPreferences | null>(null);
   const [isLatestItem, setIsLatestItem] = useState(true);
   const [currentHistoryTitle, setCurrentHistoryTitle] = useState<string | null>(null);
+  const [hasHistory, setHasHistory] = useState(false);
+
+  // Check for existing history on component mount
+  useEffect(() => {
+    setHasHistory(historyManager.getHistory().length > 0);
+  }, []);
 
   // Clear error helper
   const clearError = () => setError(null);
@@ -292,6 +298,7 @@ export default function Home() {
       setCurrentHistoryTitle(articleData.title);
       setIsLatestItem(true);
       setCurrentStep('complete');
+      setHasHistory(true);
       
       console.log('✅ Analysis completed successfully');
       
@@ -470,12 +477,12 @@ export default function Home() {
         <div className="max-w-4xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center">
-              <div className="text-xl sm:text-2xl font-bold text-gray-800">
+              <button 
+                onClick={handleStartNew}
+                className="text-xl sm:text-2xl font-bold text-gray-800 hover:text-blue-600 transition-colors cursor-pointer"
+              >
                 🧠 Thinker
-              </div>
-              <div className="ml-2 sm:ml-4 text-xs sm:text-sm text-gray-500 hidden xs:block">
-                AI-Powered Content Creator
-              </div>
+              </button>
             </div>
             
             <div className="flex items-center gap-2 sm:gap-3">
@@ -492,15 +499,18 @@ export default function Home() {
                 </button>
               )}
               
-              <button
-                onClick={() => setHistoryOpen(true)}
-                className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
-              >
-                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-                </svg>
-                History
-              </button>
+              {/* Only show history button if there's actual history */}
+              {hasHistory && (
+                <button
+                  onClick={() => setHistoryOpen(true)}
+                  className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+                >
+                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                  </svg>
+                  History
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -729,12 +739,12 @@ export default function Home() {
         <div className="text-center mb-6 sm:mb-8 animate-fadeInUp">
           {!article ? (
             <>
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 mb-2">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gray-900 mb-4">
                 Transform Articles into Social Media Content
               </h1>
-              <p className="text-base sm:text-lg md:text-xl text-gray-600 px-4 sm:px-0">
+              <h2 className="text-lg sm:text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
                 Paste any article URL and get instant analysis with optimized social media content
-              </p>
+              </h2>
             </>
           ) : (
             <>
@@ -881,37 +891,31 @@ export default function Home() {
 
         {/* URL Input Step */}
         {currentStep === 'urlInput' && (
-          <div className="bg-white rounded-xl shadow-lg p-6 animate-fadeInUp">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Enter Article URL</h2>
-            <p className="text-gray-600 mb-6">
-              Paste the URL of any article you'd like to analyze and create content from.
-            </p>
-            
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="url" className="block text-sm font-medium text-gray-700 mb-2">
-                  Article URL
-                </label>
-                <input
-                  type="url"
-                  id="url"
-                  value={editingUrl}
-                  onChange={(e) => setEditingUrl(e.target.value)}
-                  placeholder="https://example.com/article"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500"
-                  required
-                  disabled={loading}
-                />
-              </div>
-              
-              <button
-                type="submit"
-                disabled={loading || !editingUrl.trim()}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-6 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-              >
-                {loading ? 'Processing...' : 'Analyze Article →'}
-              </button>
-            </form>
+          <div className="max-w-2xl mx-auto">
+            <div className="bg-white rounded-2xl shadow-lg p-8 animate-fadeInUp">
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div>
+                  <input
+                    type="url"
+                    id="url"
+                    value={editingUrl}
+                    onChange={(e) => setEditingUrl(e.target.value)}
+                    placeholder="https://example.com/article"
+                    className="w-full px-6 py-4 text-lg border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 shadow-sm"
+                    required
+                    disabled={loading}
+                  />
+                </div>
+                
+                <button
+                  type="submit"
+                  disabled={loading || !editingUrl.trim()}
+                  className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 px-8 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-lg shadow-lg"
+                >
+                  {loading ? 'Analyzing...' : 'Analyze Article →'}
+                </button>
+              </form>
+            </div>
           </div>
         )}
 
@@ -941,7 +945,7 @@ export default function Home() {
 
         {/* Footer */}
         <div className="mt-12 text-center text-gray-500 text-sm animate-fadeInUp">
-          <p>Powered by AI • Built with ❤️ by <a href="https://www.linkedin.com/in/slavanikitin/" className="text-blue-600 hover:text-blue-800">Slava</a></p>
+          <p>Built & powered by AI • Designed by a <a href="https://www.linkedin.com/in/slavanikitin/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 transition-colors">human</a></p>
         </div>
       </main>
 

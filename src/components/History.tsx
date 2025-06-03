@@ -119,24 +119,24 @@ export default function History({ isOpen, onClose, onLoadItem, currentHistoryId 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black bg-opacity-50" onClick={onClose} />
+      <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onClick={onClose} />
       
       {/* Sidebar */}
-      <div className="absolute right-0 top-0 h-full w-96 bg-white shadow-xl flex flex-col">
+      <div className="absolute right-0 top-0 h-full w-96 bg-white shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4">
+        <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <svg className="w-6 h-6 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="w-5 h-5 mr-3" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
               </svg>
-              <h2 className="text-lg font-semibold">History</h2>
+              <h2 className="text-xl font-semibold">History</h2>
             </div>
             <button
               onClick={onClose}
-              className="text-white hover:text-gray-200 transition-colors"
+              className="text-white hover:text-gray-200 transition-colors p-1 rounded-md hover:bg-white/20"
             >
-              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
               </svg>
             </button>
@@ -147,115 +147,117 @@ export default function History({ isOpen, onClose, onLoadItem, currentHistoryId 
           </div>
         </div>
 
-        {/* History Management */}
-        {historyItems.length > 0 && (
-          <div className="border-b border-gray-200 p-3">
-            <button
-              onClick={handleClearHistory}
-              className="w-full px-3 py-2 text-xs bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors"
-            >
-              Clear All History
-            </button>
-          </div>
-        )}
-
         {/* History List */}
         <div className="flex-1 overflow-y-auto">
           {historyItems.length === 0 ? (
-            <div className="p-6 text-center text-gray-500">
-              <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-              </svg>
-              <p className="text-sm">No saved items yet</p>
-              <p className="text-xs text-gray-400 mt-1">
+            <div className="p-8 text-center text-gray-500">
+              <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <p className="text-base font-medium mb-1">No saved items yet</p>
+              <p className="text-sm text-gray-400">
                 Generate some content to see it here
               </p>
             </div>
           ) : (
-            <div className="space-y-2 p-3">
-              {historyItems.map((item) => (
-                <div
-                  key={item.id}
-                  className={`bg-gray-50 rounded-lg p-3 hover:bg-gray-100 transition-colors cursor-pointer group ${
-                    currentHistoryId === item.id ? 'ring-2 ring-blue-500 bg-blue-50' : ''
-                  }`}
-                  onClick={() => handleLoadItem(item)}
+            <>
+              {/* Clear History Button */}
+              <div className="p-4 border-b border-gray-100">
+                <button
+                  onClick={handleClearHistory}
+                  className="w-full px-4 py-2 text-sm bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors font-medium"
                 >
-                  {/* Main Content */}
-                  <div className="flex items-start justify-between mb-2">
-                    {editingId === item.id ? (
-                      <div className="flex-1 mr-2">
-                        <input
-                          type="text"
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSaveTitle(item.id);
-                            if (e.key === 'Escape') handleCancelEdit();
-                          }}
-                          onBlur={() => handleSaveTitle(item.id)}
-                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          autoFocus
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-medium text-gray-900 text-sm truncate">
-                            {item.articleTitle}
-                          </h3>
-                          {currentHistoryId === item.id && (
-                            <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full flex-shrink-0">
-                              Current
-                            </span>
-                          )}
+                  Clear All History
+                </button>
+              </div>
+
+              <div className="p-4 space-y-3">
+                {historyItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`group relative bg-white rounded-xl p-4 border transition-all duration-200 cursor-pointer hover:shadow-md ${
+                      currentHistoryId === item.id 
+                        ? 'ring-2 ring-blue-500 border-blue-200 bg-blue-50' 
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    onClick={() => handleLoadItem(item)}
+                  >
+                    {/* Main Content */}
+                    <div className="flex items-start justify-between mb-3">
+                      {editingId === item.id ? (
+                        <div className="flex-1 mr-2">
+                          <input
+                            type="text"
+                            value={editTitle}
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveTitle(item.id);
+                              if (e.key === 'Escape') handleCancelEdit();
+                            }}
+                            onBlur={() => handleSaveTitle(item.id)}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            autoFocus
+                            onClick={(e) => e.stopPropagation()}
+                          />
                         </div>
-                        <div className="flex items-center justify-between text-xs text-gray-400">
-                          <span className="truncate mr-2">{new URL(item.articleUrl).hostname}</span>
-                          <span className="flex-shrink-0">{formatDate(item.createdAt)}</span>
+                      ) : (
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between mb-2">
+                            <h3 className="font-semibold text-gray-900 text-sm leading-tight">
+                              {item.articleTitle}
+                            </h3>
+                            {currentHistoryId === item.id && (
+                              <span className="ml-2 text-xs bg-blue-500 text-white px-2 py-1 rounded-full flex-shrink-0 font-medium">
+                                Current
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-gray-500">
+                            <span className="truncate mr-2 font-medium">{new URL(item.articleUrl).hostname}</span>
+                            <span className="flex-shrink-0">{formatDate(item.createdAt)}</span>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    
-                    {editingId !== item.id && (
-                      <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={(e) => handleEditTitle(item, e)}
-                          className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                          title="Edit title"
-                        >
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={(e) => handleDeleteItem(item.id, e)}
-                          className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                          title="Delete"
-                        >
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                          </svg>
-                        </button>
+                      )}
+                      
+                      {editingId !== item.id && (
+                        <div className="flex opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+                          <button
+                            onClick={(e) => handleEditTitle(item, e)}
+                            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                            title="Edit title"
+                          >
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteItem(item.id, e)}
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete"
+                          >
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Posts Status - Only if posts exist */}
+                    {item.generatedPosts && (
+                      <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span className="text-xs text-green-700 font-medium">
+                          {item.generatedPosts.posts.length} post{item.generatedPosts.posts.length !== 1 ? 's' : ''} generated
+                        </span>
                       </div>
                     )}
                   </div>
-
-                  {/* Posts Status - Only if posts exist */}
-                  {item.generatedPosts && (
-                    <div className="flex items-center gap-1 text-xs">
-                      <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                      <span className="text-green-700 font-medium">
-                        {item.generatedPosts.posts.length} post{item.generatedPosts.posts.length !== 1 ? 's' : ''} generated
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>
