@@ -50,7 +50,7 @@ const contentTypeOptions = [
 type ProcessingStep = 'urlInput' | 'fetching' | 'contentType' | 'analysis' | 'generating' | 'complete';
 
 export default function Home() {
-  // Testing preview deployment on dev branch
+  // Testing preview deployment with env vars configured
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<AppError | null>(null);
   const [currentStep, setCurrentStep] = useState<ProcessingStep>('urlInput');
