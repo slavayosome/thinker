@@ -1,7 +1,8 @@
 import { ChainContext } from '@/lib/promptChain';
 import { useState, useEffect } from 'react';
-import { PostGenerationPreferences, PostTone, PostType, Platform, SocialPostsResult, Language, ArticleData, AnalysisResult, HooksResult, ContentResult } from '@/types';
+import { PostGenerationPreferences, PostTone, PostType, Platform, SocialPostsResult, Language, ArticleData, AnalysisResult, HooksResult, ContentResult, PostStyle } from '@/types';
 import { historyManager } from '@/lib/history';
+import { AppError, createError, handleFetchError, parseApiError } from '@/lib/errorUtils';
 
 interface SocialMediaResultsContext {
   article: ArticleData | null;
@@ -16,6 +17,11 @@ interface SocialMediaResultsProps {
   currentUrl?: string;
   onRequestUrlChange?: () => void;
   detectedLanguage?: Language;
+  languageDetectionStatus?: {
+    isDetecting: boolean;
+    wasAutoDetected: boolean;
+    confidence: number;
+  };
   historicalPosts?: SocialPostsResult | null;
   historicalPreferences?: PostGenerationPreferences | null;
   isLatestItem?: boolean;
@@ -104,11 +110,13 @@ export default function SocialMediaResults({
   currentUrl,
   onRequestUrlChange,
   detectedLanguage: propDetectedLanguage,
+  languageDetectionStatus,
   historicalPosts,
   historicalPreferences,
   isLatestItem = true,
   onNewHistoryItemCreated
 }: SocialMediaResultsProps) {
+  // State management
   const [collapsedSections, setCollapsedSections] = useState({
     analysis: false,
     hooks: false,
@@ -128,20 +136,15 @@ export default function SocialMediaResults({
   const [selectedIndexes, setSelectedIndexes] = useState<number[]>(getInitialSelectedIndexes());
   const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
   
-  // Language detection state
-  const [detectedLanguage, setDetectedLanguage] = useState<Language>(propDetectedLanguage || 'english');
-  const [languageConfidence, setLanguageConfidence] = useState<number>(0);
-  const [isDetectingLanguage, setIsDetectingLanguage] = useState(false);
-  
-  // Post generation preferences - with all defaults explicitly set
+  // Post generation preferences
   const [postPreferences, setPostPreferences] = useState<PostGenerationPreferences>(
     historicalPreferences || {
       selectedHooks: [],
-      tone: 'authors-voice', // Author's voice as default
+      tone: 'authors-voice',
       style: 'storytelling',
       postType: 'sequence',
       platform: 'linkedin',
-      language: 'english', // Will be updated after detection
+      language: 'english',
       contentLength: 'medium',
       hashtagPreference: 'moderate',
       emojiUsage: 'minimal',
@@ -150,24 +153,27 @@ export default function SocialMediaResults({
     }
   );
 
-  // Generated posts state - initialize with historical posts if available
+  // Generated posts state
   const [generatedPosts, setGeneratedPosts] = useState<SocialPostsResult | null>(historicalPosts || null);
   const [isGeneratingPosts, setIsGeneratingPosts] = useState(false);
-  const [postGenerationError, setPostGenerationError] = useState<string | null>(null);
-
-  // Advanced settings toggle
+  const [postGenerationError, setPostGenerationError] = useState<AppError | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // Update local state when props change
   useEffect(() => {
     if (propDetectedLanguage !== undefined) {
-      setDetectedLanguage(propDetectedLanguage);
+      // Auto-select the detected language if it was auto-detected
+      if (languageDetectionStatus?.wasAutoDetected) {
+        setPostPreferences(prev => ({
+          ...prev,
+          language: propDetectedLanguage
+        }));
+      }
     }
-  }, [propDetectedLanguage]);
+  }, [propDetectedLanguage, languageDetectionStatus?.wasAutoDetected]);
 
-  // Reset state when context changes (new article loaded)
+  // Reset state when context changes
   useEffect(() => {
-    // Reset selected indexes based on the new context
     const newSelectedIndexes = (() => {
       if (context.generatedContent?.items) {
         return context.generatedContent.items
@@ -179,23 +185,18 @@ export default function SocialMediaResults({
     
     setSelectedIndexes(newSelectedIndexes);
     
-    // If this is a different article (different history ID), clear generated posts
-    // Otherwise, use historical posts if available
     if (historicalPosts) {
       setGeneratedPosts(historicalPosts);
     } else {
       setGeneratedPosts(null);
     }
     
-    // Use historical preferences if available
     if (historicalPreferences) {
       setPostPreferences(historicalPreferences);
     }
     
-    // Clear any error messages
     setPostGenerationError(null);
     
-    // Update post preferences with the new selection (only if no historical preferences)
     if (!historicalPreferences) {
       setPostPreferences(prev => ({
         ...prev,
@@ -206,49 +207,7 @@ export default function SocialMediaResults({
     console.log('🔄 Context changed, resetting state');
   }, [context.article?.url, context.generatedContent, currentHistoryId, historicalPosts, historicalPreferences]);
 
-  // Detect language when context is available
-  useEffect(() => {
-    const detectLanguage = async () => {
-      if (!context.article) return;
-      
-      setIsDetectingLanguage(true);
-      try {
-        const response = await fetch('/api/detect-language', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            article: context.article
-          }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.result) {
-            setDetectedLanguage(data.result.language);
-            setLanguageConfidence(data.result.confidence);
-            
-            // Update the preferences with detected language
-            setPostPreferences(prev => ({
-              ...prev,
-              language: data.result.language
-            }));
-            
-            console.log(`🌍 Language detected: ${data.result.language} (${data.result.confidence}% confidence)`);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to detect language:', error);
-        // Keep English as default if detection fails
-      } finally {
-        setIsDetectingLanguage(false);
-      }
-    };
-
-    detectLanguage();
-  }, [context.article]);
-
+  // Helper functions
   const toggleSection = (section: keyof typeof collapsedSections) => {
     setCollapsedSections(prev => ({
       ...prev,
@@ -276,7 +235,6 @@ export default function SocialMediaResults({
         ? prev.filter(i => i !== index)
         : [...prev, index];
       
-      // Update preferences
       setPostPreferences(current => ({
         ...current,
         selectedHooks: newSelection
@@ -288,12 +246,26 @@ export default function SocialMediaResults({
 
   const handleGeneratePosts = async () => {
     if (!context.article || !context.analysis || (!context.hooks && !context.generatedContent)) {
-      setPostGenerationError('Missing required data for post generation');
+      setPostGenerationError(createError(
+        'validation',
+        'Missing required data for post generation',
+        'Article analysis or content is not available',
+        false,
+        undefined,
+        ['Please ensure the article has been analyzed first', 'Try reloading the page if data is missing']
+      ));
       return;
     }
 
     if (selectedIndexes.length === 0) {
-      setPostGenerationError('Please select at least one item');
+      setPostGenerationError(createError(
+        'validation',
+        'Please select at least one content item',
+        'No content items are selected for post generation',
+        false,
+        undefined,
+        ['Check at least one content item above', 'Select the most relevant hooks or insights for your posts']
+      ));
       return;
     }
 
@@ -301,7 +273,6 @@ export default function SocialMediaResults({
     setPostGenerationError(null);
 
     try {
-      // Build hooks data from whichever source is available
       const allItems = context.hooks
         ? context.hooks.hooks
         : context.generatedContent?.items.map(it => it.content) || [];
@@ -322,25 +293,33 @@ export default function SocialMediaResults({
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `API error: ${response.status}`);
+        const fetchError = await handleFetchError(response, 'post generation');
+        throw fetchError;
       }
 
       const data = await response.json();
+      
+      if (!data.success) {
+        throw createError(
+          'api',
+          'Failed to generate posts',
+          data.error || 'API returned unsuccessful response',
+          true,
+          undefined,
+          ['Try adjusting your content selection', 'Check if the selected content has enough context', 'Try again in a few moments']
+        );
+      }
+
       setGeneratedPosts(data.posts);
       
-      // If we're working with an old history item, create a new one
       if (!isLatestItem && context.generatedContent && data.posts) {
-        // Create a new history item with updated content
         const newHistoryId = historyManager.saveContentGeneration(
-          context.article.url,
-          context.article.title,
+          context.article,
           context.generatedContent,
           postPreferences.language,
           context.analysis
         );
         
-        // Save the posts to the new history item
         historyManager.savePostGeneration(
           newHistoryId,
           data.posts,
@@ -348,14 +327,12 @@ export default function SocialMediaResults({
           selectedIndexes
         );
         
-        // Notify parent component about the new history item
         if (onNewHistoryItemCreated) {
           onNewHistoryItemCreated(newHistoryId);
         }
         
         console.log('📝 Created new history item from old one:', newHistoryId);
       } else if (currentHistoryId && data.posts) {
-        // Update existing history item if it's the latest
         historyManager.savePostGeneration(
           currentHistoryId,
           data.posts,
@@ -364,7 +341,6 @@ export default function SocialMediaResults({
         );
       }
       
-      // Scroll to the posts section
       setTimeout(() => {
         const postsSection = document.getElementById('generated-posts');
         if (postsSection) {
@@ -374,7 +350,8 @@ export default function SocialMediaResults({
 
     } catch (error) {
       console.error('Failed to generate posts:', error);
-      setPostGenerationError(error instanceof Error ? error.message : 'Failed to generate posts');
+      const appError = parseApiError(error, 'post generation');
+      setPostGenerationError(appError);
     } finally {
       setIsGeneratingPosts(false);
     }
@@ -389,24 +366,50 @@ export default function SocialMediaResults({
           <h4 className="font-semibold text-gray-800 mb-2">Central Theme:</h4>
           <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">{context.analysis.centralTheme}</p>
         </div>
-        
-        <div>
-          <h4 className="font-semibold text-gray-800 mb-2">Key Messages:</h4>
-          <ul className="space-y-2">
-            {context.analysis.keyMessages.map((message, index) => (
-              <li key={index} className="flex items-start">
-                <span className="bg-indigo-100 text-indigo-800 text-xs font-medium px-2 py-1 rounded-full mr-3 mt-1">
-                  {index + 1}
-                </span>
-                <span className="text-gray-700">{message}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
         <div>
           <h4 className="font-semibold text-gray-800 mb-2">Summary:</h4>
           <p className="text-gray-700 bg-gray-50 p-3 rounded-lg leading-relaxed">{context.analysis.summary}</p>
+        </div>
+      </div>
+    );
+  };
+
+  // Enhanced error display for post generation
+  const renderPostGenerationError = () => {
+    if (!postGenerationError) return null;
+
+    return (
+      <div className="mt-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+        <div className="flex items-start">
+          <div className="flex-shrink-0">
+            <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <div className="ml-3 flex-1">
+            <h4 className="text-sm font-semibold text-red-800 mb-1">
+              {postGenerationError.type === 'validation' ? 'Input Required' : 'Generation Failed'}
+            </h4>
+            <p className="text-red-700 text-sm mb-2">{postGenerationError.message}</p>
+            {postGenerationError.suggestions && postGenerationError.suggestions.length > 0 && (
+              <ul className="text-red-600 text-sm space-y-1">
+                {postGenerationError.suggestions.map((suggestion, index) => (
+                  <li key={index} className="flex items-start">
+                    <span className="mr-2">•</span>
+                    <span>{suggestion}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <button
+            onClick={() => setPostGenerationError(null)}
+            className="flex-shrink-0 ml-2 text-red-400 hover:text-red-600"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
       </div>
     );
@@ -429,7 +432,7 @@ export default function SocialMediaResults({
                   ? 'bg-yellow-100 border-yellow-300 ring-2 ring-yellow-300' 
                   : 'bg-yellow-50 border-yellow-200'
               }`}>
-                  <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between">
                   <div className="flex items-start flex-1">
                     <input
                       type="checkbox"
@@ -443,250 +446,71 @@ export default function SocialMediaResults({
                       <div>{text}</div>
                     </label>
                   </div>
-                    <button
+                  <button
                     onClick={() => copyToClipboard(text, `item-${index}`)}
-                      className="ml-2 text-gray-500 hover:text-gray-700 transition-colors"
-                    >
+                    className="ml-2 text-gray-500 hover:text-gray-700 transition-colors"
+                  >
                     {copiedIndex === `item-${index}` ? '✅' : '📋'}
-                    </button>
-                  </div>
+                  </button>
                 </div>
+              </div>
             </div>
           ))}
         </div>
 
-        {/* Translate items button */}
-        {detectedLanguage !== 'english' && (
-          <div className="mb-4 bg-blue-50 p-3 sm:p-4 rounded-lg border border-blue-200">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
-              {/* Language Info - Full width on mobile */}
-              <div className="flex items-center">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-blue-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 0016 0zm-4 2a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-                  <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3.586l1.707-1.707a1 1 0 111.414 1.414l-3.414 3.414a1 1 0 01-1.414 0l-3.414-3.414a1 1 0 011.414-1.414L9 7.586V6a1 1 0 011-1z" clipRule="evenodd" />
-                </svg>
-                <span className="text-xs sm:text-sm font-medium text-gray-700">
-                  Original language: <span className="font-semibold">{languageOptions.find(l=>l.value===detectedLanguage)?.label || 'Unknown'}</span>
-                </span>
-              </div>
-              
-              {/* Translation Controls - Full width on mobile */}
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <label className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap" htmlFor="translate-select">
-                  Translate to:
-                </label>
-                <select
-                  id="translate-select"
-                  onChange={async (e) => {
-                    const targetLang = e.target.value;
-                    if (!targetLang) return;
-                    
-                    // Add loading state to the select element
-                    e.target.disabled = true;
-                    e.target.classList.add('opacity-50');
-                    
-                    try {
-                      const itemsText = items.join('\n---\n');
-                      const res = await fetch('/api/translate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          text: itemsText,
-                          targetLanguage: targetLang
-                        })
-                      });
-                      
-                      if (res.ok) {
-                        const data = await res.json();
-                        const translatedItems = data.translated.split('\n---\n');
-                        
-                        // Create a more mobile-friendly display
-                        const formattedTranslation = translatedItems.map((item: string, idx: number) => (
-                          `${idx + 1}. ${item.trim()}`
-                        )).join('\n\n');
-                        
-                        // Show translation in a more readable format
-                        alert(`${languageOptions.find(l=>l.value===targetLang)?.flag} Translation:\n\n${formattedTranslation}`);
-                      } else {
-                        alert('Translation failed. Please try again.');
-                      }
-                    } catch (e) {
-                      alert('Translation failed. Please try again.');
-                    } finally {
-                      // Reset the select element state
-                      e.target.disabled = false;
-                      e.target.classList.remove('opacity-50');
-                      e.target.value = '';
-                    }
-                  }}
-                  className="flex-1 sm:flex-none px-2 sm:px-3 py-1 sm:py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs sm:text-sm bg-white text-gray-900"
-                >
-                  <option value="">Choose language...</option>
-                  {languageOptions
-                    .filter(lang => lang.value !== detectedLanguage)
-                    .map((lang) => (
-                      <option key={lang.value} value={lang.value}>
-                        {lang.flag} {lang.label}
-                      </option>
-                    ))}
-                </select>
-              </div>
-            </div>
+        {/* Post Customization Settings */}
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden animate-fadeInUp">
+          <div className="bg-green-50 border-b border-green-200 p-4">
+            <h3 className="text-lg font-semibold text-green-900 flex items-center">
+              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M11 4a4 4 0 114 4 4 4 0 01-4 4v2a1 1 0 11-2 0V8a1 1 0 011-1h3a2 2 0 100-4 2 2 0 100 4 1 1 0 11-2 0z" clipRule="evenodd" />
+              </svg>
+              Post Customization Settings
+            </h3>
           </div>
-        )}
-
-        {/* Post Generation Controls */}
-        <div className="mt-6 p-6 bg-gray-50 rounded-lg">
-          <h4 className="font-semibold text-gray-800 mb-4 flex items-center">
-            <svg className="w-5 h-5 mr-2 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.532 1.532 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-            </svg>
-            Advanced Post Customization
-          </h4>
           
-          {/* BASIC SETTINGS */}
-          <div className="space-y-6 mb-6">
-            <h5 className="font-semibold text-gray-700">Basic Settings</h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="p-6 space-y-6">
+            {/* Basic Settings */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Platform Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Platform</label>
                 <select
                   value={postPreferences.platform}
-                  onChange={(e) => setPostPreferences(prev => ({ ...prev, platform: e.target.value as any }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500 text-gray-900"
+                  onChange={(e) => setPostPreferences(prev => ({ ...prev, platform: e.target.value as Platform }))}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 >
                   <option value="linkedin">LinkedIn</option>
-                  <option value="twitter">Twitter</option>
+                  <option value="twitter">Twitter/X</option>
                   <option value="facebook">Facebook</option>
                   <option value="instagram">Instagram</option>
                 </select>
               </div>
 
-              {/* Language Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Language
-                  {isDetectingLanguage && (
-                    <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">
-                      🔍 Detecting...
-                    </span>
-                  )}
-                  {!isDetectingLanguage && languageConfidence > 0 && (
-                    <span className="ml-2 px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
-                      Auto-detected ({languageConfidence}%)
-                    </span>
-                  )}
-                </label>
-                <select
-                  value={postPreferences.language}
-                  onChange={(e) => setPostPreferences(prev => ({ ...prev, language: e.target.value as Language }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500 text-gray-900"
-                  disabled={isDetectingLanguage}
-                >
-                  {languageOptions.map((lang) => (
-                    <option key={lang.value} value={lang.value}>
-                      {lang.flag} {lang.label}
-                    </option>
-                  ))}
-                </select>
-                {!isDetectingLanguage && detectedLanguage === postPreferences.language && languageConfidence > 70 && (
-                  <p className="text-xs text-green-600 mt-1">
-                    ✨ Article language auto-detected with high confidence
-                  </p>
-                )}
-                {!isDetectingLanguage && languageConfidence < 70 && languageConfidence > 0 && (
-                  <p className="text-xs text-amber-600 mt-1">
-                    ⚠️ Language detection confidence is low - please verify selection
-                  </p>
-                )}
-              </div>
-
-              {/* Post Type Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Post Type</label>
-                <div className="space-y-2">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="postType"
-                      value="single"
-                      checked={postPreferences.postType === 'single'}
-                      onChange={(e) => setPostPreferences(prev => ({ ...prev, postType: e.target.value as any }))}
-                      className="mr-2 text-yellow-600 focus:ring-yellow-500"
-                    />
-                    <span className="text-sm text-gray-900">Single Post</span>
-                  </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="postType"
-                      value="sequence"
-                      checked={postPreferences.postType === 'sequence'}
-                      onChange={(e) => setPostPreferences(prev => ({ ...prev, postType: e.target.value as any }))}
-                      className="mr-2 text-yellow-600 focus:ring-yellow-500"
-                    />
-                    <span className="text-sm text-gray-900">Post Sequence (3-5 posts)</span>
-                  </label>
-                </div>
-              </div>
-
               {/* Tone Selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tone
-                  {postPreferences.tone === 'authors-voice' && (
-                    <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">Recommended</span>
-                  )}
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tone</label>
                 <select
                   value={postPreferences.tone}
-                  onChange={(e) => setPostPreferences(prev => ({ ...prev, tone: e.target.value as any }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500 text-gray-900"
+                  onChange={(e) => setPostPreferences(prev => ({ ...prev, tone: e.target.value as PostTone }))}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 >
-                  <option value="authors-voice">Author's Voice (Recommended)</option>
+                  <option value="authors-voice">Author's Voice</option>
                   <option value="professional">Professional</option>
                   <option value="casual">Casual</option>
-                  <option value="enthusiastic">Enthusiastic</option>
-                  <option value="thoughtful">Thoughtful</option>
-                  <option value="conversational">Conversational</option>
+                  <option value="inspirational">Inspirational</option>
+                  <option value="educational">Educational</option>
+                  <option value="humorous">Humorous</option>
                 </select>
               </div>
 
-              {/* Content Length */}
+              {/* Style Selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Content Length</label>
-                <select
-                  value={postPreferences.contentLength}
-                  onChange={(e) => setPostPreferences(prev => ({ ...prev, contentLength: e.target.value as any }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500 text-gray-900"
-                >
-                  <option value="short">Short (50-100 words)</option>
-                  <option value="medium">Medium (100-200 words)</option>
-                  <option value="long">Long (200+ words)</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* ADVANCED SETTINGS COLLAPSIBLE */}
-          <div className="mb-6">
-            <button
-              onClick={()=>setAdvancedOpen(o=>!o)}
-              className="flex items-center text-sm font-medium text-blue-600 mb-3">
-              <svg className={`w-4 h-4 mr-1 transition-transform ${advancedOpen?'rotate-90':''}`} fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M6 6a1 1 0 011.707-.707l4 4a1 1 0 010 1.414l-4 4A1 1 0 016 14V6z" clipRule="evenodd"/></svg>
-              {advancedOpen?'Hide':'Show'} Advanced Settings
-            </button>
-
-            {advancedOpen && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Writing Style */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Writing Style</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Style</label>
                 <select
                   value={postPreferences.style}
-                  onChange={(e) => setPostPreferences(prev => ({ ...prev, style: e.target.value as any }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500 text-gray-900"
+                  onChange={(e) => setPostPreferences(prev => ({ ...prev, style: e.target.value as PostStyle }))}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 >
                   <option value="storytelling">Storytelling</option>
                   <option value="data-driven">Data-Driven</option>
@@ -697,135 +521,197 @@ export default function SocialMediaResults({
                   <option value="provocative">Provocative</option>
                 </select>
               </div>
+            </div>
 
-              {/* Target Audience */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience</label>
-                <select
-                  value={postPreferences.targetAudience}
-                  onChange={(e) => setPostPreferences(prev => ({ ...prev, targetAudience: e.target.value as any }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500 text-gray-900"
-                >
-                  <option value="general">General Audience</option>
-                  <option value="professionals">Working Professionals</option>
-                  <option value="entrepreneurs">Entrepreneurs</option>
-                  <option value="students">Students & Learners</option>
-                  <option value="executives">Executives</option>
-                  <option value="creators">Content Creators</option>
-                </select>
-              </div>
-
-              {/* CTA */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Call-to-Action Style</label>
-                <select
-                  value={postPreferences.ctaType}
-                  onChange={(e) => setPostPreferences(prev => ({ ...prev, ctaType: e.target.value as any }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500 text-gray-900"
-                >
-                  <option value="mixed">Mixed</option>
-                  <option value="question">Questions</option>
-                  <option value="action">Action-Oriented</option>
-                  <option value="share">Share-Focused</option>
-                  <option value="comment">Comment-Driven</option>
-                  <option value="poll">Polls</option>
-                </select>
-              </div>
-
-              {/* Emoji Usage */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Emoji Usage</label>
-                <select
-                  value={postPreferences.emojiUsage}
-                  onChange={(e) => setPostPreferences(prev => ({ ...prev, emojiUsage: e.target.value as any }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500 text-gray-900"
-                >
-                  <option value="none">None</option>
-                  <option value="minimal">Minimal</option>
-                  <option value="moderate">Moderate</option>
-                  <option value="heavy">Heavy</option>
-                </select>
-              </div>
-
-              {/* Hashtags */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Hashtags</label>
-                <select
-                  value={postPreferences.hashtagPreference}
-                  onChange={(e) => setPostPreferences(prev => ({ ...prev, hashtagPreference: e.target.value as any }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500 text-gray-900"
-                >
-                  <option value="none">No Hashtags</option>
-                  <option value="minimal">Minimal</option>
-                  <option value="moderate">Moderate</option>
-                  <option value="comprehensive">Comprehensive</option>
-                </select>
-              </div>
-            </div>)}
-          </div>
-
-          {/* Preview & Generate */}
-          <div className="space-y-4">
-            <h5 className="font-medium text-gray-700 border-b border-gray-200 pb-2">Generate</h5>
-            
-            {/* Settings Summary */}
-            <div className="p-3 bg-white rounded-md border border-gray-200">
-              <h6 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Current Settings</h6>
-              <div className="text-sm space-y-1">
-                <div><span className="font-medium">Platform:</span> {postPreferences.platform.toUpperCase()}</div>
-                <div><span className="font-medium">Language:</span> {languageOptions.find(l => l.value === postPreferences.language)?.flag} {languageOptions.find(l => l.value === postPreferences.language)?.label.split(' ')[0]}</div>
-                <div><span className="font-medium">Tone:</span> {postPreferences.tone === 'authors-voice' ? "Author's Voice" : postPreferences.tone}</div>
-                <div><span className="font-medium">Style:</span> {postPreferences.style}</div>
-                <div><span className="font-medium">Audience:</span> {postPreferences.targetAudience}</div>
-                <div><span className="font-medium">Length:</span> {postPreferences.contentLength}</div>
+            {/* Language Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Output Language</label>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                {languageOptions.map((language) => (
+                  <button
+                    key={language.value}
+                    onClick={() => setPostPreferences(prev => ({ ...prev, language: language.value as Language }))}
+                    className={`flex items-center justify-center px-3 py-2 rounded-md border transition-colors ${
+                      postPreferences.language === language.value
+                        ? 'bg-green-100 border-green-300 text-green-800'
+                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="mr-1">{language.flag}</span>
+                    <span className="text-xs font-medium truncate">{language.label.split(' ')[0]}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Generate Button */}
-            <button
-              onClick={handleGeneratePosts}
-              disabled={selectedIndexes.length === 0 || isGeneratingPosts}
-              className={`w-full py-4 px-4 rounded-md font-medium transition-all duration-200 ${
-                selectedIndexes.length === 0 || isGeneratingPosts
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-yellow-600 to-orange-600 text-white hover:from-yellow-700 hover:to-orange-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
-              }`}
-            >
-              {isGeneratingPosts ? (
-                <div className="flex items-center justify-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Generating Posts...
-                </div>
-              ) : (
-                <div className="flex items-center justify-center">
-              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 0116 0zm3.707-8.293l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd" />
-              </svg>
-                    Generate {postPreferences.postType === 'single' ? '1 Post' : 'Post Sequence'} ({selectedIndexes.length} item{selectedIndexes.length === 1 ? '' : 's'} selected)
+            {/* Advanced Settings Toggle */}
+            <div className="border-t border-gray-200 pt-4">
+              <button
+                onClick={() => setAdvancedOpen(!advancedOpen)}
+                className="flex items-center justify-between w-full text-left text-sm font-medium text-gray-700 hover:text-gray-900 focus:outline-none"
+              >
+                <span>Advanced Settings</span>
+                <svg 
+                  className={`w-4 h-4 transition-transform duration-200 ${advancedOpen ? 'rotate-180' : ''}`} 
+                  fill="currentColor" 
+                  viewBox="0 0 20 20"
+                >
+                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+
+              {/* Advanced Settings Panel */}
+              {advancedOpen && (
+                <div className="mt-4 space-y-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Content Length */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Content Length</label>
+                      <select
+                        value={postPreferences.contentLength}
+                        onChange={(e) => setPostPreferences(prev => ({ ...prev, contentLength: e.target.value as any }))}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      >
+                        <option value="short">Short</option>
+                        <option value="medium">Medium</option>
+                        <option value="long">Long</option>
+                      </select>
+                    </div>
+
+                    {/* Target Audience */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience</label>
+                      <select
+                        value={postPreferences.targetAudience}
+                        onChange={(e) => setPostPreferences(prev => ({ ...prev, targetAudience: e.target.value as any }))}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      >
+                        <option value="professionals">Professionals</option>
+                        <option value="general">General Audience</option>
+                        <option value="entrepreneurs">Entrepreneurs</option>
+                        <option value="students">Students</option>
+                        <option value="experts">Industry Experts</option>
+                      </select>
+                    </div>
+
+                    {/* Hashtag Preference */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Hashtags</label>
+                      <select
+                        value={postPreferences.hashtagPreference}
+                        onChange={(e) => setPostPreferences(prev => ({ ...prev, hashtagPreference: e.target.value as any }))}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      >
+                        <option value="none">No Hashtags</option>
+                        <option value="minimal">Minimal (1-2)</option>
+                        <option value="moderate">Moderate (3-5)</option>
+                        <option value="comprehensive">Extensive (6+)</option>
+                      </select>
+                    </div>
+
+                    {/* Emoji Usage */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Emoji Usage</label>
+                      <select
+                        value={postPreferences.emojiUsage}
+                        onChange={(e) => setPostPreferences(prev => ({ ...prev, emojiUsage: e.target.value as any }))}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      >
+                        <option value="none">No Emojis</option>
+                        <option value="minimal">Minimal</option>
+                        <option value="moderate">Moderate</option>
+                        <option value="heavy">Heavy</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Call to Action Type */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Call to Action</label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {['engagement', 'share', 'comment', 'mixed'].map((cta) => (
+                        <button
+                          key={cta}
+                          onClick={() => setPostPreferences(prev => ({ ...prev, ctaType: cta as any }))}
+                          className={`px-3 py-2 rounded-md border text-sm font-medium transition-colors ${
+                            postPreferences.ctaType === cta
+                              ? 'bg-green-100 border-green-300 text-green-800'
+                              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {cta.charAt(0).toUpperCase() + cta.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
-            </button>
-
-            {/* Error Display */}
-            {postGenerationError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-                <p className="text-red-800 text-sm">{postGenerationError}</p>
-              </div>
-            )}
-
-            {/* Selection Info */}
-            <div className="text-xs text-gray-500 text-center">
-              {selectedIndexes.length === 0 
-                ? 'Select one or more items above to generate posts'
-                : `${selectedIndexes.length} item${selectedIndexes.length === 1 ? '' : 's'} selected • Ready to generate!`
-              }
             </div>
           </div>
         </div>
+
+        {/* Generate Button */}
+        <div className="mt-6">
+          <button
+            onClick={handleGeneratePosts}
+            disabled={selectedIndexes.length === 0 || isGeneratingPosts}
+            className={`w-full py-3 px-4 rounded-md font-medium transition-all duration-200 ${
+              selectedIndexes.length === 0 || isGeneratingPosts
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-gradient-to-r from-yellow-600 to-orange-600 text-white hover:from-yellow-700 hover:to-orange-700 focus:outline-none focus:ring-2 focus:ring-yellow-500'
+            }`}
+          >
+            {isGeneratingPosts ? (
+              <div className="flex items-center justify-center">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Generating Posts...
+              </div>
+            ) : (
+              `Generate Posts (${selectedIndexes.length} item${selectedIndexes.length === 1 ? '' : 's'} selected)`
+            )}
+          </button>
+
+          {renderPostGenerationError()}
+        </div>
       </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Article Analysis Section */}
+      {context.analysis && (
+        <CollapsibleSection
+          title="Article Analysis"
+          icon={<svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+          </svg>}
+          colorScheme="indigo"
+          isCollapsed={collapsedSections.analysis}
+          onToggle={() => toggleSection('analysis')}
+        >
+          {renderAnalysisContent()}
+        </CollapsibleSection>
+      )}
+
+      {/* Content Selection Section */}
+      {(context.hooks || context.generatedContent) && (
+        <CollapsibleSection
+          title={context.hooks ? "Generated Hooks" : "Generated Content"}
+          icon={<svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clipRule="evenodd" />
+            <path fillRule="evenodd" d="M4 5a2 2 0 012-2v1a1 1 0 001 1h6a1 1 0 001-1V3a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zM8 8a1 1 0 000 2h4a1 1 0 100-2H8z" clipRule="evenodd" />
+          </svg>}
+          colorScheme="yellow"
+          isCollapsed={collapsedSections.hooks}
+          onToggle={() => toggleSection('hooks')}
+        >
+          {renderSelectableContent()}
+        </CollapsibleSection>
+      )}
 
       {/* Generated Social Media Posts */}
       {generatedPosts && (

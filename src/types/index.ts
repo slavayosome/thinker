@@ -107,6 +107,7 @@ export interface HistoryItem {
   title: string;
   articleUrl: string;
   articleTitle: string;
+  articleAuthor?: string;
   articleAnalysis?: AnalysisResult;
   contentType: ContentType;
   generatedContent: ContentResult;

@@ -74,8 +74,7 @@ export class HistoryManager {
   }
 
   saveContentGeneration(
-    articleUrl: string,
-    articleTitle: string,
+    articleData: { url: string; title: string; author?: string },
     contentResult: ContentResult,
     language: Language,
     analysis?: AnalysisResult,
@@ -86,9 +85,10 @@ export class HistoryManager {
     
     const item: HistoryItem = {
       id,
-      title: customTitle || this.generateShortTitle(articleTitle, contentResult.type),
-      articleUrl,
-      articleTitle,
+      title: customTitle || this.generateShortTitle(articleData.title, contentResult.type),
+      articleUrl: articleData.url,
+      articleTitle: articleData.title,
+      articleAuthor: articleData.author,
       articleAnalysis: analysis,
       contentType: contentResult.type,
       generatedContent: contentResult,

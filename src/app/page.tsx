@@ -6,6 +6,7 @@ import SocialMediaResults from '@/components/SocialMediaResults';
 import History from '@/components/History';
 import { ArticleData, AnalysisResult, ContentResult, ContentType, HistoryItem, Language, SocialPostsResult, PostGenerationPreferences } from '@/types';
 import { historyManager } from '@/lib/history';
+import { AppError, createError, logError, handleFetchError, parseApiError, createParsingError, getErrorIcon, getErrorTitle, getUserFriendlyMessage } from '@/lib/errorUtils';
 
 const contentTypeOptions = [
   { 
@@ -50,7 +51,7 @@ type ProcessingStep = 'urlInput' | 'fetching' | 'contentType' | 'analysis' | 'ge
 
 export default function Home() {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<AppError | null>(null);
   const [currentStep, setCurrentStep] = useState<ProcessingStep>('urlInput');
   const [selectedContentType, setSelectedContentType] = useState<ContentType>('hooks');
   const [url, setUrl] = useState('');
@@ -61,6 +62,15 @@ export default function Home() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [generatedContent, setGeneratedContent] = useState<ContentResult | null>(null);
   const [detectedLanguage, setDetectedLanguage] = useState<Language>('english');
+  const [languageDetectionStatus, setLanguageDetectionStatus] = useState<{
+    isDetecting: boolean;
+    wasAutoDetected: boolean;
+    confidence: number;
+  }>({
+    isDetecting: false,
+    wasAutoDetected: false,
+    confidence: 0
+  });
   const [availableContentTypes, setAvailableContentTypes] = useState<any[]>([]);
   const [recommendedTypes, setRecommendedTypes] = useState<ContentType[]>([]);
   const [isDetectingTypes, setIsDetectingTypes] = useState(false);
@@ -73,16 +83,30 @@ export default function Home() {
   const [isLatestItem, setIsLatestItem] = useState(true);
   const [currentHistoryTitle, setCurrentHistoryTitle] = useState<string | null>(null);
 
+  // Clear error helper
+  const clearError = () => setError(null);
+
   // New function to fetch article only
   async function handleFetchArticle(submittedUrl: string) {
     console.log('🚀 Fetching article from:', submittedUrl);
+    console.log('🔍 URL length:', submittedUrl.length);
+    console.log('🔍 URL starts with:', submittedUrl.substring(0, 20));
     
     try {
       setLoading(true);
-      setError('');
+      clearError();
       setUrl(submittedUrl);
       setEditingUrl(submittedUrl);
       setCurrentStep('fetching');
+      
+      // Validate URL format
+      try {
+        new URL(submittedUrl);
+      } catch {
+        throw createError('validation', 'Please enter a valid URL', 'Invalid URL format', false);
+      }
+      
+      console.log('🌐 Sending URL to API:', submittedUrl);
       
       // Parse the article to validate it exists
       const parseResponse = await fetch('/api/parse', {
@@ -93,21 +117,38 @@ export default function Home() {
         body: JSON.stringify({ url: submittedUrl }),
       });
 
+      console.log('📡 Parse response status:', parseResponse.status);
+
       if (!parseResponse.ok) {
-        const errorData = await parseResponse.json();
-        throw new Error(errorData.error || `Failed to fetch article: ${parseResponse.status}`);
+        const fetchError = await handleFetchError(parseResponse, 'article parsing');
+        throw fetchError;
       }
 
       const parseData = await parseResponse.json();
       
+      console.log('📋 Parse response data URL:', parseData.url);
+      console.log('📋 Parse response data title:', parseData.title);
+      
       // The parse API returns the article directly, not wrapped in a success field
       if (parseData.error) {
-        throw new Error(parseData.error);
+        // Create a specific parsing error with URL context
+        throw createParsingError(parseData.error, submittedUrl);
       }
       
       // Validate we have required article data
       if (!parseData.title || !parseData.content) {
-        throw new Error('Invalid article data received');
+        if (!parseData.title && !parseData.content) {
+          throw createParsingError('No content found in the article', submittedUrl);
+        } else if (!parseData.title) {
+          throw createParsingError('Article title could not be extracted', submittedUrl);
+        } else {
+          throw createParsingError('Article content could not be extracted', submittedUrl);
+        }
+      }
+
+      // Check if content is too short (might indicate extraction issues)
+      if (parseData.content.length < 100) {
+        throw createParsingError('Article content appears incomplete or too short', submittedUrl);
       }
 
       // Article fetched successfully, now analyze it directly
@@ -119,22 +160,47 @@ export default function Home() {
         date_published: parseData.date_published || ''
       };
       
+      console.log('✅ Final article data URL:', articleData.url);
+      
+      // Check if the resolved URL is very different from the input
+      const inputDomain = new URL(submittedUrl).hostname;
+      const resolvedDomain = parseData.url ? new URL(parseData.url).hostname : inputDomain;
+      
+      // Warn if this resolved to a GitHub Gist (which often has incomplete content)
+      if (parseData.url && parseData.url.includes('gist.github.com')) {
+        console.warn('⚠️ Article resolved to GitHub Gist, content may be incomplete');
+        
+        // Check if content is too short for a typical article
+        if (parseData.content.length < 500) {
+          throw createParsingError(
+            `This Medium article redirects to a GitHub Gist with limited content. GitHub Gists are code snippets, not full articles.`,
+            submittedUrl
+          );
+        }
+      }
+      
+      // Check for domain changes and log them
+      if (inputDomain !== resolvedDomain) {
+        console.log(`🔀 URL resolved from ${inputDomain} to ${resolvedDomain}`);
+      }
+
+      // Set article immediately so title/author appear
       setArticle(articleData);
       
-      // Proceed directly to analysis
-      handleAnalyzeArticle(articleData);
+      // Continue to analysis without setting loading=false
+      // This ensures smooth transition to analysis
+      await handleAnalyzeArticle(articleData);
       
       console.log('✅ Article fetched successfully');
       
     } catch (err) {
-      console.error('❌ Article fetch failed:', err instanceof Error ? err.message : 'Unknown error');
-      
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-      setError(`Error fetching article: ${errorMessage}`);
+      const appError = parseApiError(err, 'handleFetchArticle');
+      logError(appError, 'handleFetchArticle', err);
+      setError(appError);
       setCurrentStep('urlInput');
-    } finally {
       setLoading(false);
     }
+    // Note: No finally block here to avoid setting loading=false prematurely
   }
 
   // New function to analyze article and extract key messages
@@ -146,8 +212,8 @@ export default function Home() {
     setHistoricalPreferences(null);
     
     try {
-      setLoading(true);
-      setError('');
+      // Don't set loading=true again since it's already true from handleFetchArticle
+      clearError();
       setCurrentStep('analysis');
       
       // Analyze article
@@ -160,37 +226,26 @@ export default function Home() {
       });
 
       if (!analysisResponse.ok) {
-        const errorData = await analysisResponse.json();
-        throw new Error(errorData.error || `Analysis failed: ${analysisResponse.status}`);
+        const fetchError = await handleFetchError(analysisResponse, 'article analysis');
+        throw fetchError;
       }
 
       const analysisData = await analysisResponse.json();
       
       if (!analysisData.success) {
-        throw new Error(analysisData.error || 'Analysis failed');
+        throw createError('api', analysisData.error || 'Analysis failed', 'API returned unsuccessful response', true);
       }
 
+      // Validate analysis data
+      if (!analysisData.analysis || !analysisData.analysis.keyMessages) {
+        throw createError('parsing', 'Invalid analysis data received', 'Missing analysis or key messages', true);
+      }
+
+      // Set analysis immediately so central theme and key messages appear
       setAnalysis(analysisData.analysis);
       
-      // Detect language
-      try {
-        const langResponse = await fetch('/api/detect-language', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ article: articleData }),
-        });
-
-        if (langResponse.ok) {
-          const langData = await langResponse.json();
-          if (langData.success && langData.result) {
-            setDetectedLanguage(langData.result.language);
-          }
-        }
-      } catch (langError) {
-        console.error('Language detection failed:', langError);
-      }
+      // Detect language in the background
+      detectLanguageInBackground(articleData);
       
       // Create content result from key messages for backward compatibility
       const contentResult = {
@@ -207,8 +262,7 @@ export default function Home() {
       
       // Save to history
       const historyId = historyManager.saveContentGeneration(
-        articleData.url,
-        articleData.title,
+        articleData,
         contentResult,
         detectedLanguage,
         analysisData.analysis
@@ -222,15 +276,63 @@ export default function Home() {
       console.log('✅ Analysis completed successfully');
       
     } catch (err) {
-      console.error('❌ Analysis failed:', err instanceof Error ? err.message : 'Unknown error');
-      
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-      setError(`Error analyzing article: ${errorMessage}`);
+      const appError = parseApiError(err, 'handleAnalyzeArticle');
+      logError(appError, 'handleAnalyzeArticle', err);
+      setError(appError);
       setCurrentStep('urlInput');
     } finally {
       setLoading(false);
     }
   }
+
+  // Helper function to detect language in the background
+  const detectLanguageInBackground = async (articleData: any) => {
+    try {
+      setLanguageDetectionStatus(prev => ({ ...prev, isDetecting: true }));
+      
+      const langResponse = await fetch('/api/detect-language', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ article: articleData }),
+      });
+
+      if (langResponse.ok) {
+        const langData = await langResponse.json();
+        if (langData.success && langData.result) {
+          const detectedLang = langData.result.language;
+          const confidence = langData.result.confidence;
+          
+          setDetectedLanguage(detectedLang);
+          setLanguageDetectionStatus({
+            isDetecting: false,
+            wasAutoDetected: true,
+            confidence: confidence
+          });
+          
+          console.log(`✅ Language auto-detected: ${detectedLang} (${confidence}% confidence)`);
+        } else {
+          console.warn('⚠️ Language detection returned unsuccessful response');
+        }
+      } else {
+        console.warn(`⚠️ Language detection failed with status: ${langResponse.status}`);
+      }
+    } catch (langError) {
+      console.warn('⚠️ Language detection failed:', langError);
+    } finally {
+      setLanguageDetectionStatus(prev => ({ ...prev, isDetecting: false }));
+    }
+  };
+
+  // Retry function
+  const handleRetry = () => {
+    if (error && error.retryable) {
+      if (currentStep === 'urlInput' && url) {
+        handleFetchArticle(url);
+      }
+    }
+  };
 
   const handleNewHistoryItemCreated = (newHistoryId: string) => {
     // Update state to reflect the new history item
@@ -270,7 +372,7 @@ export default function Home() {
       title: item.articleTitle,
       url: item.articleUrl,
       content: '',
-      author: '',
+      author: item.articleAuthor || '',
       date_published: ''
     });
     
@@ -303,7 +405,7 @@ export default function Home() {
     setHistoricalPosts(item.generatedPosts || null);
     setHistoricalPreferences(item.preferences || null);
     
-    setError('');
+    clearError();
   };
 
   const handleLoadLatest = () => {
@@ -320,7 +422,7 @@ export default function Home() {
     setGeneratedContent(null);
     setCurrentHistoryId(null);
     setCurrentStep('urlInput');
-    setError('');
+    clearError();
     setUrl('');
     setEditingUrl('');
     setHistoricalPosts(null);
@@ -328,6 +430,11 @@ export default function Home() {
     setIsLatestItem(true);
     setCurrentHistoryTitle(null);
     setDetectedLanguage('english');
+    setLanguageDetectionStatus({
+      isDetecting: false,
+      wasAutoDetected: false,
+      confidence: 0
+    });
   };
 
   // Request to change URL after generation
@@ -383,45 +490,108 @@ export default function Home() {
           <div className="bg-white border-t border-gray-100 shadow-sm animate-fadeInDown">
             <div className="max-w-4xl mx-auto px-3 sm:px-4 py-2">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
-                {/* Mobile: Stack vertically, Desktop: Side by side */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                  {/* Status Indicator - Always visible */}
-                  <div className="flex items-center justify-between sm:justify-start">
-                  <div className="flex items-center">
-                    {!isLatestItem ? (
-                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 rounded-full border border-amber-200">
-                          <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
-                          <span className="text-xs font-medium text-amber-800">Previous</span>
-                      </div>
-                    ) : (
-                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 rounded-full border border-emerald-200">
-                          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+
+                {/* --- Reusable Components --- */}
+                {/*
+                  StatusIndicator: Shows "Previous" or "Latest" with colored dot.
+                  LanguageDetectionBadge: Shows language detection status (detecting or detected).
+                  LatestButton: Button to load latest, with different props for mobile/desktop.
+                */}
+                {(() => {
+                  // Status indicator
+                  function StatusIndicator({ isLatest }: { isLatest: boolean }) {
+                    return isLatest ? (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 rounded-full border border-emerald-200">
+                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
                         <span className="text-xs font-medium text-emerald-800">Latest</span>
                       </div>
-                      )}
-                    </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 rounded-full border border-amber-200">
+                        <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+                        <span className="text-xs font-medium text-amber-800">Previous</span>
+                      </div>
+                    );
+                  }
 
-                    {/* Mobile-only: Latest button inline with status */}
-                    {!isLatestItem && (
+                  // Language detection badge
+                  function LanguageDetectionBadge({
+                    isDetecting,
+                    wasAutoDetected,
+                    detectedLanguage,
+                    confidence,
+                    className = "",
+                    detectingText = "Detecting...",
+                    detectedTextPrefix = "Auto-detected: ",
+                  }: {
+                    isDetecting: boolean;
+                    wasAutoDetected: boolean;
+                    detectedLanguage: string;
+                    confidence: number;
+                    className?: string;
+                    detectingText?: string;
+                    detectedTextPrefix?: string;
+                  }) {
+                    if (!isDetecting && !wasAutoDetected) return null;
+                    return (
+                      <div className={`flex items-center gap-2 ${className}`}>
+                        {isDetecting ? (
+                          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 rounded-full border border-blue-200">
+                            <svg className="animate-spin w-3 h-3 text-blue-600" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span className="text-xs font-medium text-blue-800">{detectingText}</span>
+                          </div>
+                        ) : wasAutoDetected && (
+                          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-green-50 rounded-full border border-green-200">
+                            <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            <span className="text-xs font-medium text-green-800">
+                              {detectedTextPrefix}
+                              {detectedLanguage.charAt(0).toUpperCase() + detectedLanguage.slice(1)}
+                            </span>
+                            {confidence > 0 && (
+                              <span className="text-xs text-green-600">
+                                ({confidence}%)
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // Latest button
+                  function LatestButton({
+                    onClick,
+                    className = "",
+                    iconClass = "w-4 h-4",
+                    text = "Latest",
+                    showTextClass = "",
+                  }: {
+                    onClick: () => void;
+                    className?: string;
+                    iconClass?: string;
+                    text?: string;
+                    showTextClass?: string;
+                  }) {
+                    return (
                       <button
-                        onClick={handleLoadLatest}
-                        className="sm:hidden inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-md hover:bg-emerald-100 transition-colors"
+                        onClick={onClick}
+                        className={className}
                       >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
                         </svg>
-                        <span>Latest</span>
+                        <span className={showTextClass}>{text}</span>
                       </button>
-                    )}
-                  </div>
+                    );
+                  }
 
-                  {/* Divider - Hidden on mobile */}
-                  <div className="hidden sm:block h-6 w-px bg-gray-200" />
-
-                  {/* Current Work Context */}
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-                    {/* URL Section - Simplified on mobile */}
-                    {url && (
+                  // URL display
+                  function UrlSection({ url, generatedContent, onChange }: { url: string, generatedContent: any, onChange: () => void }) {
+                    return (
                       <div className="flex items-center gap-1.5">
                         <svg className="w-3.5 h-3.5 text-gray-400 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -432,7 +602,7 @@ export default function Home() {
                           </span>
                           {generatedContent && (
                             <button
-                              onClick={() => handleRequestChange('url')}
+                              onClick={onChange}
                               className="text-xs text-blue-600 hover:text-blue-800 font-medium"
                             >
                               Change
@@ -440,44 +610,94 @@ export default function Home() {
                           )}
                         </div>
                       </div>
-                    )}
+                    );
+                  }
 
-                    {/* Content Type Section - Compact on mobile */}
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-gray-100 rounded-md">
-                        <span className="text-xs sm:text-sm">
-                          💡
-                        </span>
-                        <span className="text-xs sm:text-sm font-medium text-gray-700">
-                          Key Insights
-                        </span>
+                  // --- Main Render ---
+                  return (
+                    <>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                        {/* Status Indicator - Always visible */}
+                        <div className="flex items-center justify-between sm:justify-start w-full sm:w-auto">
+                          <div className="flex items-center">
+                            <StatusIndicator isLatest={isLatestItem} />
+                          </div>
+
+                          {/* Language Detection Display - Mobile */}
+                          <div className="sm:hidden">
+                            <LanguageDetectionBadge
+                              isDetecting={languageDetectionStatus.isDetecting}
+                              wasAutoDetected={languageDetectionStatus.wasAutoDetected}
+                              detectedLanguage={detectedLanguage}
+                              confidence={languageDetectionStatus.confidence}
+                              detectingText="Detecting..."
+                              detectedTextPrefix="Auto-detected: "
+                            />
+                          </div>
+
+                          {/* Mobile-only: Latest button inline with status */}
+                          {!isLatestItem && (
+                            <LatestButton
+                              onClick={handleLoadLatest}
+                              className="sm:hidden inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-md hover:bg-emerald-100 transition-colors"
+                              iconClass="w-3 h-3"
+                              text="Latest"
+                              showTextClass=""
+                            />
+                          )}
+                        </div>
+
+                        {/* Divider - Hidden on mobile */}
+                        <div className="hidden sm:block h-6 w-px bg-gray-200" />
+
+                        {/* Current Work Context */}
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                          {/* URL Section - Simplified on mobile */}
+                          {url && (
+                            <UrlSection
+                              url={url}
+                              generatedContent={generatedContent}
+                              onChange={() => handleRequestChange('url')}
+                            />
+                          )}
+
+                          {/* History Title - Hidden on smaller screens */}
+                          <div className="hidden md:flex items-center gap-2 text-xs sm:text-sm text-gray-500">
+                            <span className="text-gray-400">•</span>
+                            <span className="max-w-[150px] lg:max-w-[300px] truncate" title={currentHistoryTitle}>
+                              {currentHistoryTitle}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
 
-                    {/* History Title - Hidden on smaller screens */}
-                    <div className="hidden md:flex items-center gap-2 text-xs sm:text-sm text-gray-500">
-                      <span className="text-gray-400">•</span>
-                      <span className="max-w-[150px] lg:max-w-[300px] truncate" title={currentHistoryTitle}>
-                        {currentHistoryTitle}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                      {/* Right Section - Language Detection (Desktop only) */}
+                      <div className="hidden sm:flex items-center gap-3">
+                        <LanguageDetectionBadge
+                          isDetecting={languageDetectionStatus.isDetecting}
+                          wasAutoDetected={languageDetectionStatus.wasAutoDetected}
+                          detectedLanguage={detectedLanguage}
+                          confidence={languageDetectionStatus.confidence}
+                          className="ml-auto"
+                          detectingText="Detecting Language..."
+                          detectedTextPrefix="Auto-detected: "
+                        />
 
-                {/* Right Section - Desktop only Latest button */}
-                  {!isLatestItem && (
-                  <div className="hidden sm:flex items-center gap-2">
-                    <button
-                      onClick={handleLoadLatest}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-md hover:bg-emerald-100 transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                      </svg>
-                      <span className="hidden sm:inline">Latest</span>
-                    </button>
-                  </div>
-                  )}
+                        {!isLatestItem && (
+                          <LatestButton
+                            onClick={handleLoadLatest}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-md hover:bg-emerald-100 transition-colors"
+                            iconClass="w-4 h-4"
+                            text="Latest"
+                            showTextClass="hidden sm:inline"
+                          />
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
+                {/* --- End Reusable Components --- */}
+
               </div>
             </div>
           </div>
@@ -501,14 +721,7 @@ export default function Home() {
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 mb-2">
                 {/* Show English title by default, original title for non-English articles */}
                 {analysis?.centralTheme && detectedLanguage !== 'english' ? (
-                  <div className="space-y-2">
-                    <div className="text-lg sm:text-xl md:text-2xl text-gray-600 font-medium">
-                      {analysis.centralTheme}
-                    </div>
-                    <div className="text-base sm:text-lg md:text-xl text-gray-500 font-normal">
-                      Original: {article.title}
-                    </div>
-                  </div>
+                  article.title
                 ) : (
                   article.title
                 )}
@@ -542,14 +755,106 @@ export default function Home() {
           </div>
         )}
 
-        {/* Error Display */}
+        {/* Enhanced Error Display */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <div className="flex items-center">
-              <svg className="w-5 h-5 text-red-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 0016 0zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-              <span className="text-red-800">{error}</span>
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border-l-4 border-red-500 animate-fadeInUp">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={getErrorIcon(error.type, error.subtype)} />
+                </svg>
+              </div>
+              
+              <div className="ml-3 flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                  {getErrorTitle(error.type, error.subtype)}
+                </h3>
+                <p className="text-gray-700 mb-2">{error.message}</p>
+                {error.details && (
+                  <p className="text-sm text-gray-500 mb-3">{error.details}</p>
+                )}
+                <p className="text-sm text-gray-600 mb-3">{getUserFriendlyMessage(error)}</p>
+                
+                {/* Display actionable suggestions */}
+                {error.suggestions && error.suggestions.length > 0 && (
+                  <div className="bg-blue-50 rounded-lg p-3 mb-4">
+                    <h4 className="text-sm font-medium text-blue-900 mb-2">
+                      💡 What you can try:
+                    </h4>
+                    <ul className="text-sm text-blue-800 space-y-1">
+                      {error.suggestions.map((suggestion, index) => (
+                        <li key={index} className="flex items-start">
+                          <span className="mr-2">•</span>
+                          <span>{suggestion}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                
+                {/* Show the problematic URL for parsing errors */}
+                {error.type === 'parsing' && url && (
+                  <div className="bg-gray-50 rounded-lg p-3 mb-4">
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">
+                      🔗 URL being processed:
+                    </h4>
+                    <p className="text-xs text-gray-600 font-mono break-all bg-white p-2 rounded border">
+                      {url}
+                    </p>
+                    {url !== editingUrl && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        (Original input: {editingUrl})
+                      </p>
+                    )}
+                  </div>
+                )}
+                
+                {/* Example URLs for parsing errors */}
+                {error.type === 'parsing' && (
+                  <div className="bg-green-50 rounded-lg p-3 mb-4">
+                    <h4 className="text-sm font-medium text-green-900 mb-2">
+                      ✅ Try these reliable sources:
+                    </h4>
+                    <div className="text-sm text-green-800 space-y-1">
+                      <div>• BBC News, Reuters, Associated Press</div>
+                      <div>• TechCrunch, Ars Technica (for tech articles)</div>
+                      <div>• Harvard Business Review (for business content)</div>
+                      <div>• Most major newspaper websites</div>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                  {error.retryable && (
+                    <button
+                      onClick={handleRetry}
+                      disabled={loading}
+                      className="inline-flex items-center px-3 py-2 border border-red-300 shadow-sm text-sm leading-4 font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Try Again
+                    </button>
+                  )}
+                  
+                  <button
+                    onClick={clearError}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    Dismiss
+                  </button>
+                  
+                  {error.type !== 'validation' && (
+                    <button
+                      onClick={handleStartNew}
+                      className="inline-flex items-center px-3 py-2 border border-blue-300 shadow-sm text-sm leading-4 font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      Start Over
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -605,6 +910,7 @@ export default function Home() {
               currentUrl={url}
               onRequestUrlChange={() => handleRequestChange('url')}
               detectedLanguage={detectedLanguage}
+              languageDetectionStatus={languageDetectionStatus}
               historicalPosts={historicalPosts}
               historicalPreferences={historicalPreferences}
               isLatestItem={isLatestItem}
