@@ -143,13 +143,31 @@ export default function Home() {
         }
       }
 
-      const parseData = await parseResponse.json();
-      
-      console.log('📋 Parse response data URL:', parseData.url);
-      console.log('📋 Parse response data title:', parseData.title);
+      let parseData;
+      try {
+        parseData = await parseResponse.json();
+        console.log('📋 Parse response data received, processing...');
+      } catch (jsonError) {
+        console.error('❌ Failed to parse JSON response:', jsonError);
+        throw createParsingError('Invalid response format from server', submittedUrl);
+      }
+
+      // Log the structure of parseData for debugging
+      console.log('📋 Parse response data structure:', {
+        hasTitle: !!parseData?.title,
+        hasContent: !!parseData?.content,
+        hasUrl: !!parseData?.url,
+        hasError: !!parseData?.error,
+        titleLength: parseData?.title?.length || 0,
+        contentLength: parseData?.content?.length || 0,
+        keys: Object.keys(parseData || {})
+      });
+
+      console.log('📋 Parse response data URL:', parseData?.url);
+      console.log('📋 Parse response data title:', parseData?.title);
       
       // Check for hybrid parsing metadata and log it
-      if (parseData._hybrid) {
+      if (parseData?._hybrid) {
         console.log(`📊 Parsing method: ${parseData._hybrid.parsingMethod} (${parseData._hybrid.extractionTime}ms, confidence: ${parseData._hybrid.confidence}%)`);
         if (parseData._hybrid.extractionMethods?.length > 0) {
           console.log(`🔍 Extraction methods: ${parseData._hybrid.extractionMethods.join(', ')}`);
@@ -157,9 +175,14 @@ export default function Home() {
       }
       
       // The parse API returns the article directly, not wrapped in a success field
-      if (parseData.error) {
+      if (parseData?.error) {
         // Create a specific parsing error with URL context
         throw createParsingError(parseData.error, submittedUrl);
+      }
+
+      // More robust validation with detailed error messages
+      if (!parseData) {
+        throw createParsingError('No data received from parsing service', submittedUrl);
       }
       
       // Validate we have required article data
@@ -178,11 +201,23 @@ export default function Home() {
         throw createParsingError('Article content appears incomplete or too short', submittedUrl);
       }
 
+      // Extract URL string, handling structured data objects
+      let extractedUrl = submittedUrl; // fallback to submitted URL
+      if (typeof parseData.url === 'string') {
+        extractedUrl = parseData.url;
+      } else if (typeof parseData.url === 'object' && parseData.url?.['@id']) {
+        extractedUrl = parseData.url['@id'];
+        console.log('🔗 Extracted URL from structured data:', extractedUrl);
+      } else if (typeof parseData.url === 'object' && parseData.url?.url) {
+        extractedUrl = parseData.url.url;
+        console.log('🔗 Extracted URL from object.url:', extractedUrl);
+      }
+
       // Article fetched successfully, now analyze it directly
       const articleData = {
         title: parseData.title,
         content: parseData.content,
-        url: parseData.url || submittedUrl,
+        url: extractedUrl,
         author: parseData.author || '',
         date_published: parseData.date_published || ''
       };
@@ -190,25 +225,30 @@ export default function Home() {
       console.log('✅ Final article data URL:', articleData.url);
       
       // Check if the resolved URL is very different from the input
-      const inputDomain = new URL(submittedUrl).hostname;
-      const resolvedDomain = parseData.url ? new URL(parseData.url).hostname : inputDomain;
-      
-      // Warn if this resolved to a GitHub Gist (which often has incomplete content)
-      if (parseData.url && parseData.url.includes('gist.github.com')) {
-        console.warn('⚠️ Article resolved to GitHub Gist, content may be incomplete');
+      try {
+        const inputDomain = new URL(submittedUrl).hostname;
+        const resolvedDomain = parseData.url ? new URL(parseData.url).hostname : inputDomain;
         
-        // Check if content is too short for a typical article
-        if (parseData.content.length < 500) {
-          throw createParsingError(
-            `This Medium article redirects to a GitHub Gist with limited content. GitHub Gists are code snippets, not full articles.`,
-            submittedUrl
-          );
+        // Warn if this resolved to a GitHub Gist (which often has incomplete content)
+        if (parseData.url && parseData.url.includes('gist.github.com')) {
+          console.warn('⚠️ Article resolved to GitHub Gist, content may be incomplete');
+          
+          // Check if content is too short for a typical article
+          if (parseData.content.length < 500) {
+            throw createParsingError(
+              `This Medium article redirects to a GitHub Gist with limited content. GitHub Gists are code snippets, not full articles.`,
+              submittedUrl
+            );
+          }
         }
-      }
-      
-      // Check for domain changes and log them
-      if (inputDomain !== resolvedDomain) {
-        console.log(`🔀 URL resolved from ${inputDomain} to ${resolvedDomain}`);
+        
+        // Check for domain changes and log them
+        if (inputDomain !== resolvedDomain) {
+          console.log(`🔀 URL resolved from ${inputDomain} to ${resolvedDomain}`);
+        }
+      } catch (urlError) {
+        console.warn('⚠️ Failed to process URL domains:', urlError);
+        // Continue processing even if URL domain check fails
       }
 
       // Set article immediately so title/author appear
@@ -243,13 +283,16 @@ export default function Home() {
       clearError();
       setCurrentStep('analysis');
       
-      // Analyze article
+      // Analyze article - pass the article data directly instead of just the URL
       const analysisResponse = await fetch('/api/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ url: articleData.url }),
+        body: JSON.stringify({ 
+          url: articleData.url,
+          article: articleData  // Pass the full article data
+        }),
       });
 
       if (!analysisResponse.ok) {

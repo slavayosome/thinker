@@ -37,7 +37,7 @@ const openai = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
-    const { url } = await request.json();
+    const { url, article } = await request.json();
     
     if (!url) {
       return NextResponse.json({ 
@@ -45,17 +45,44 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    console.log('🔗 Analyzing article:', url);
-    console.log('🔍 URL contains %:', url.includes('%'));
-    console.log('🔍 URL length:', url.length);
+    // Handle cases where url might be an object (from structured data)
+    let actualUrl: string;
+    if (typeof url === 'string') {
+      actualUrl = url;
+    } else if (typeof url === 'object' && url['@id']) {
+      // Extract URL from structured data object
+      actualUrl = url['@id'];
+      console.log('🔗 Extracted URL from structured data:', actualUrl);
+    } else if (typeof url === 'object' && url.url) {
+      // Alternative structure
+      actualUrl = url.url;
+      console.log('🔗 Extracted URL from object.url:', actualUrl);
+    } else {
+      console.error('❌ Invalid URL format:', url);
+      return NextResponse.json({ 
+        error: "Invalid URL format" 
+      }, { status: 400 });
+    }
 
-    // Fetch and parse the article
-    const article = await fetchArticle(url);
+    console.log('🔗 Analyzing article:', actualUrl);
+    console.log('🔍 URL contains %:', actualUrl.includes('%'));
+    console.log('🔍 URL length:', actualUrl.length);
+
+    let articleData;
     
-    console.log('✅ Article fetched:', article.title);
+    // If article data is provided, use it directly; otherwise fetch it
+    if (article && article.title && article.content) {
+      console.log('📄 Using provided article data:', article.title);
+      articleData = article;
+    } else {
+      console.log('🔍 No article data provided, fetching from URL...');
+      // Fetch and parse the article
+      articleData = await fetchArticle(actualUrl);
+      console.log('✅ Article fetched:', articleData.title);
+    }
     
     // Build the analysis prompt
-    const prompt = buildAnalysisPrompt(article);
+    const prompt = buildAnalysisPrompt(articleData);
     
     console.log('🤖 Sending to OpenAI...');
     
@@ -95,7 +122,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      article,
+      article: articleData,
       analysis
     });
 
